@@ -1,11 +1,8 @@
 package com.nicedev.vocabularizer.dictionary;
 
 import java.io.Serializable;
-import java.io.StreamCorruptedException;
+import java.util.*;
 
-/**
- * Created by sugarik on 28.08.2016.
- */
 public class Vocabula implements Serializable, Comparable {
 
 	private final Language language;
@@ -13,29 +10,58 @@ public class Vocabula implements Serializable, Comparable {
 	private String transcription;
 	private Vocabula identicalTo;
 	public final boolean isComposite;
+	Map<PartOfSpeech, Set<Definition>> forms;
 
-	public Vocabula(String charSeq, String langName, String transcription) {
+	public Vocabula(String charSeq, Language lang, String transcription) {
 		this.charSeq = charSeq;
 		this.transcription = transcription;
 		this.identicalTo = null;
-		this.language = new Language(langName, "");
+		this.language = lang;
 		this.isComposite = charSeq.contains("\\s");
+		forms = new HashMap<>();
 	}
 
-	public Vocabula(String charSeq, String language) {
-		this(charSeq, language, "");
+	public Vocabula(String charSeq, Language lang) {
+		this(charSeq, lang, "");
+	}
+
+	public boolean addForm(String partOfSpeechName, String meaning){
+		PartOfSpeech pos = language.partsOfSpeech.get(partOfSpeechName);
+		Set<Definition> definitions = forms.getOrDefault(pos, new TreeSet<>());
+		Map.Entry<Vocabula, PartOfSpeech> mEntry = new AbstractMap.SimpleEntry<>(this, pos);
+		forms.putIfAbsent(pos, definitions);
+		return definitions.add(new Definition(language, mEntry, meaning));
+	}
+
+	public void removeForm(String partOfSpeechName) {
+		forms.remove(language.partsOfSpeech.get(partOfSpeechName));
+	}
+
+	public Set<Definition> getDefinitions(PartOfSpeech partOfSpeech) {
+		if (partOfSpeech == null) return Collections.<Definition>emptySet();
+		Set<Definition> defs;
+		switch (partOfSpeech.partName) {
+			case PartOfSpeech.ANY:
+				defs = forms.keySet().stream()
+						       .map(this::getDefinitions)
+						       .collect(TreeSet::new, Set::addAll, Set::addAll);
+			break;
+			default:
+				defs = forms.getOrDefault(partOfSpeech, Collections.emptySet());
+		}
+		return Collections.<Definition>unmodifiableSet(defs);
+	}
+
+	public Set<Definition> getDefinitions(String partOfSpeechName) {
+		return getDefinitions(language.partsOfSpeech.get(partOfSpeechName));
 	}
 
 	@Override
 	public boolean equals(Object o) {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;
-
 		Vocabula vocabula = (Vocabula) o;
-
-		if (!charSeq.equals(vocabula.charSeq)) return false;
-		return language.equals(vocabula.language);
-
+		return charSeq.equals(vocabula.charSeq);
 	}
 
 	@Override
@@ -60,6 +86,13 @@ public class Vocabula implements Serializable, Comparable {
 			identicalTo = vocabula;
 	}
 
+	public int getMeaningCount() {
+		return forms.values().stream().mapToInt(Set::size).sum();
+	}
+
+	public int getFormCount() {
+		return forms.keySet().size();
+	}
 
 	@Override
 	public int compareTo(Object o) {
@@ -68,6 +101,20 @@ public class Vocabula implements Serializable, Comparable {
 
 	@Override
 	public String toString() {
-		return charSeq;
+		StringBuilder res = new StringBuilder();
+		res.append(String.format("%s%n", charSeq));
+		getDefinitions(PartOfSpeech.ANY).forEach(res::append);
+		return res.toString();
 	}
+//
+//	public String toString() {
+//		StringBuilder res = new StringBuilder();
+//		res.append(String.format("%s%n", charSeq));
+//		for (PartOfSpeech partOfSpeech: forms.keySet()){
+//			res.append(String.format("\t: %s%n", partOfSpeech.partName));
+//			for(Definition definition : getDefinitions(partOfSpeech))
+//				res.append(String.format("\t\t- %s%n", definition));
+//		}
+//		return res.toString();
+//	}
 }

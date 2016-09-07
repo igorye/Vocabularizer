@@ -2,26 +2,32 @@ package com.nicedev.vocabularizer.dictionary;
 
 import java.io.Serializable;
 
-/**
- * Created by sugarik on 28.08.2016.
- */
-
 public class PartOfSpeech implements Serializable, Comparable {
 	final public Language lang;
-	final public String name;
+	final public String partName;
+	final public String shortName;
 	public PartOfSpeech correspondsTo;
+	public boolean identiacalCorrespondance;
 
-	final static String UNDEFINED = "UNDEFINED";
-	final static String ANY = "ANY";
+	final public static String UNDEFINED = "UNDEFINED";
+	final public static String ANY = "ANY";
+	final public static String COMPOSITE = "COMPOSITE";
 
-	public PartOfSpeech(String lang) {
-		this(lang, UNDEFINED);
+
+
+	public PartOfSpeech(Language lang) {
+		this(lang, UNDEFINED, "");
 	}
 
-	public PartOfSpeech(String langName, String partName) {
-		this.lang = new Language(langName, "", Language.ENGLISH_ALPHABET);
-		this.name = partName;
+	public PartOfSpeech(Language lang, String partName, String shortName) {
+		this.lang = lang;
+		this.partName = partName;
+		this.shortName = shortName;
 		this.correspondsTo = null;
+	}
+
+	public PartOfSpeech(Language language, String partName) {
+		this(language, partName, partName);
 	}
 
 	@Override
@@ -30,13 +36,12 @@ public class PartOfSpeech implements Serializable, Comparable {
 		if (o == null || getClass() != o.getClass()) return false;
 		PartOfSpeech that = (PartOfSpeech) o;
 		if (lang.compareTo(that.lang) != 0) return false;
-		return name.compareTo(that.name) == 0;
-
+		return partName.compareTo(that.partName) == 0;
 	}
 
 	@Override
 	public int hashCode() {
-		return 31 * lang.hashCode() + name.hashCode();
+		return 31 * partName.hashCode();
 	}
 
 	public boolean assignTo(PartOfSpeech corrPoS) {
@@ -46,11 +51,11 @@ public class PartOfSpeech implements Serializable, Comparable {
 	}
 
 	public String toString() {
-		return name;
+		return partName;
 	}
 
 	@Override
 	public int compareTo(Object o) {
-		return name.compareTo(((PartOfSpeech) o).name);
+		return partName.compareTo(((PartOfSpeech) o).partName);
 	}
 }
