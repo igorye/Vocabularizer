@@ -7,15 +7,18 @@ public class Definition implements Serializable, Comparable{
 	public final Language language;
 	public final String explanatory;
 	protected Map.Entry<Vocabula, PartOfSpeech> defines;
-	private Definition indenticalTo;
+	private String indenticalTo;
 	private Set<String> useCases;
-	private Set<Definition> synonyms;
+	private Set<String> synonyms;
+
+	private boolean hasAccordance;
+//	private Set<Definition> synonyms;
 
 	public Definition(Language lang, Map.Entry<Vocabula, PartOfSpeech> defines, String explanatory) {
 		this.explanatory = explanatory;
 		this.language = lang;
 		synonyms = new TreeSet<>();
-		useCases = new TreeSet<>();
+		useCases = new LinkedHashSet<>();
 		this.defines = defines;
 	}
 
@@ -31,15 +34,19 @@ public class Definition implements Serializable, Comparable{
 		useCases.remove(useCase);
 	}
 
-	public void addSynonym(Definition definition) {
+	public void addSynonym(String definition) {
 		synonyms.add(definition);
 	}
 
-	public void removeSynonym(Definition definition) {
-		synonyms.add(definition);
+	public void removeSynonym(String definition) {
+//		synonyms.add(definition);
 	}
 
-	public Set<Definition> getSynonyms() {
+//	public Set<Definition> getSynonyms() {
+//		return Collections.unmodifiableSet(synonyms);
+//	}
+
+	public Set<String> getSynonyms() {
 		return Collections.unmodifiableSet(synonyms);
 	}
 
@@ -47,9 +54,11 @@ public class Definition implements Serializable, Comparable{
 		return Collections.unmodifiableSet(useCases);
 	}
 
-	public void assignTo(Definition definition) {
-		if(! definition.language.equals(this.language))
-			indenticalTo = definition;
+	public void assignTo(String entry) {
+		if( Language.charsMatchLanguage(entry, language)) {
+			indenticalTo = entry;
+			hasAccordance = true;
+		}
 	}
 
 	@Override
@@ -57,11 +66,55 @@ public class Definition implements Serializable, Comparable{
 		return explanatory.compareTo(((Definition) o).explanatory);
 	}
 
+	public boolean hasAccordance() {
+		return hasAccordance;
+	}
+
+	@Override
+	public boolean equals(Object o) {
+		if (this == o) return true;
+		if (o == null || getClass() != o.getClass()) return false;
+
+		Definition that = (Definition) o;
+
+		return explanatory.equalsIgnoreCase(that.explanatory);
+	}
+
+	@Override
+	public int hashCode() {
+		return explanatory.hashCode();
+	}
+
 	@Override
 	public String toString() {
 		StringBuilder res = new StringBuilder();
-		res.append(String.format("\t: %s%n", defines.getValue().partName));
-		res.append(String.format("\t\t- %s%n",explanatory));
+		if (explanatory.length() != 0)
+			res.append(String.format("    - %s",explanatory));
+		else if (indenticalTo != null)
+			res.append(String.format("    - see <it>%s</it>", indenticalTo));
+		if (synonyms.size() != 0){
+			res.append(String.format("\n      synonym%s: ", synonyms.size() > 1 ? "s" : ""));
+			synonyms.forEach(uc -> res.append(uc).append(", "));
+			if (res.lastIndexOf(", ") == res.length()-2)
+				res.replace(res.lastIndexOf(", "), res.length(), "");
+		}
+
+		if (useCases.size() != 0){
+			res.append("\n      : ");
+			useCases.forEach(uc -> res.append(String.format("\"%s\"",uc)).append(", "));
+			if (res.lastIndexOf(", ") == res.length()-2)
+				res.replace(res.lastIndexOf(", "), res.length(), "");
+		}
+		res.append("\n");
 		return res.toString();
 	}
+
+	public void addSynonyms(Set<String> synonyms) {
+		this.synonyms.addAll(synonyms);
+	}
+
+	public void addUseCases(Set<String> useCases) {
+		this.useCases.addAll(useCases);
+	}
+
 }

@@ -10,7 +10,9 @@ public class Vocabula implements Serializable, Comparable {
 	private String transcription;
 	private Vocabula identicalTo;
 	public final boolean isComposite;
-	Map<PartOfSpeech, Set<Definition>> forms;
+	private Set<Definition> unresolvedAccordances = null;
+	Map<PartOfSpeech, Set<Definition>> mapPOS;
+	private Map<PartOfSpeech, Set<String>> knownForms;
 
 	public Vocabula(String charSeq, Language lang, String transcription) {
 		this.charSeq = charSeq;
@@ -18,7 +20,18 @@ public class Vocabula implements Serializable, Comparable {
 		this.identicalTo = null;
 		this.language = lang;
 		this.isComposite = charSeq.contains("\\s");
-		forms = new HashMap<>();
+		mapPOS = new TreeMap<>();
+		knownForms = new TreeMap<>();
+	}
+
+	public Vocabula(Vocabula partialVoc) {
+		this.charSeq = partialVoc.charSeq;
+		this.transcription = partialVoc.transcription.intern();
+		this.identicalTo = partialVoc.identicalTo;
+		this.language = partialVoc.language;
+		this.isComposite = charSeq.contains("\\s");
+		mapPOS = new TreeMap<>(partialVoc.mapPOS);
+		knownForms = new TreeMap<>(partialVoc.knownForms);
 	}
 
 	public Vocabula(String charSeq, Language lang) {
@@ -26,15 +39,42 @@ public class Vocabula implements Serializable, Comparable {
 	}
 
 	public boolean addForm(String partOfSpeechName, String meaning){
-		PartOfSpeech pos = language.partsOfSpeech.get(partOfSpeechName);
-		Set<Definition> definitions = forms.getOrDefault(pos, new TreeSet<>());
+		PartOfSpeech pos = language.getPartOfSpeech(partOfSpeechName);
+		Set<Definition> definitions = mapPOS.getOrDefault(pos, new LinkedHashSet<>());
 		Map.Entry<Vocabula, PartOfSpeech> mEntry = new AbstractMap.SimpleEntry<>(this, pos);
-		forms.putIfAbsent(pos, definitions);
+		mapPOS.putIfAbsent(pos, definitions);
 		return definitions.add(new Definition(language, mEntry, meaning));
 	}
 
+	public void addForms(Vocabula newVoc) {
+		for (PartOfSpeech partOfSpeech: newVoc.mapPOS.keySet())
+			this.addDefinitions(partOfSpeech, newVoc.mapPOS.get(partOfSpeech));
+	}
+
+
+	public void addDefinition(PartOfSpeech partOfSpeech, Definition definition) {
+		Set<Definition> defs = mapPOS.getOrDefault(partOfSpeech, new TreeSet<>());
+		defs.add(definition);
+		mapPOS.putIfAbsent(partOfSpeech, defs);
+	}
+	public void addDefinition(String partOfSpeechName, Definition definition) {
+		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
+		addDefinition(partOfSpeech, definition);
+	}
+
+	public void addDefinitions(String partOfSpeechName, Set<Definition> definitions){
+		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
+		addDefinitions(partOfSpeech, definitions);
+	}
+
+	public void addDefinitions(PartOfSpeech partOfSpeech, Set<Definition> definitions) {
+		Set<Definition> defs = mapPOS.getOrDefault(partOfSpeech, new TreeSet<>());
+		defs.addAll(definitions);
+		mapPOS.putIfAbsent(partOfSpeech, defs);
+	}
+
 	public void removeForm(String partOfSpeechName) {
-		forms.remove(language.partsOfSpeech.get(partOfSpeechName));
+		mapPOS.remove(language.getPartOfSpeech(partOfSpeechName));
 	}
 
 	public Set<Definition> getDefinitions(PartOfSpeech partOfSpeech) {
@@ -42,18 +82,18 @@ public class Vocabula implements Serializable, Comparable {
 		Set<Definition> defs;
 		switch (partOfSpeech.partName) {
 			case PartOfSpeech.ANY:
-				defs = forms.keySet().stream()
+				defs = mapPOS.keySet().stream()
 						       .map(this::getDefinitions)
-						       .collect(TreeSet::new, Set::addAll, Set::addAll);
+						       .collect(LinkedHashSet::new, Set::addAll, Set::addAll);
 			break;
 			default:
-				defs = forms.getOrDefault(partOfSpeech, Collections.emptySet());
+				defs = mapPOS.getOrDefault(partOfSpeech, Collections.emptySet());
 		}
-		return Collections.<Definition>unmodifiableSet(defs);
+		return Collections.unmodifiableSet(defs);
 	}
 
 	public Set<Definition> getDefinitions(String partOfSpeechName) {
-		return getDefinitions(language.partsOfSpeech.get(partOfSpeechName));
+		return getDefinitions(language.getPartOfSpeech(partOfSpeechName));
 	}
 
 	@Override
@@ -61,7 +101,7 @@ public class Vocabula implements Serializable, Comparable {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;
 		Vocabula vocabula = (Vocabula) o;
-		return charSeq.equals(vocabula.charSeq);
+		return charSeq.equalsIgnoreCase(vocabula.charSeq);
 	}
 
 	@Override
@@ -69,7 +109,7 @@ public class Vocabula implements Serializable, Comparable {
 		return 31 * charSeq.hashCode() + language.hashCode();
 	}
 
-	public boolean hasCorrespondance() {
+	public boolean hasAccordance() {
 		return identicalTo != null;
 	}
 
@@ -77,21 +117,21 @@ public class Vocabula implements Serializable, Comparable {
 		return transcription;
 	}
 
-	void setTranscription(String transcription) {
+	public void setTranscription(String transcription) {
 		this.transcription = transcription;
 	}
 
-	void assignTo(Vocabula vocabula) {
+	public void assignTo(Vocabula vocabula) {
 		if (vocabula.language.equals(this.language))
 			identicalTo = vocabula;
 	}
 
 	public int getMeaningCount() {
-		return forms.values().stream().mapToInt(Set::size).sum();
+		return mapPOS.values().stream().mapToInt(Set::size).sum();
 	}
 
 	public int getFormCount() {
-		return forms.keySet().size();
+		return mapPOS.keySet().size();
 	}
 
 	@Override
@@ -102,15 +142,54 @@ public class Vocabula implements Serializable, Comparable {
 	@Override
 	public String toString() {
 		StringBuilder res = new StringBuilder();
-		res.append(String.format("%s%n", charSeq));
-		getDefinitions(PartOfSpeech.ANY).forEach(res::append);
+		res.append(String.format("%s [%s]%n", charSeq, getTranscription()));
+		mapPOS.keySet().forEach(partOfSpeech -> {
+			res.append(String.format("  : %s%n", partOfSpeech));
+			Set<String> forms = getForms(partOfSpeech);
+			if (forms.size() != 0){
+				res.append(String.format("      form%s: ", forms.size() > 1 ? "s" : ""));
+				forms.forEach(f -> res.append(String.format("%s, ", f)));
+				if (res.lastIndexOf(", ") == res.length()-2)
+					res.replace(res.lastIndexOf(", "), res.length(), "\n");
+			}
+			getDefinitions(partOfSpeech).forEach(res::append);
+		});
 		return res.toString();
+	}
+
+	private Set<String> getForms(PartOfSpeech partOfSpeech) {
+		return knownForms.getOrDefault(partOfSpeech, Collections.<String>emptySet());
+	}
+
+	public void addSynonym(String definition, String synonym) {	}
+
+	public void addUnresolvedAccordances(Definition definition) {
+		if (unresolvedAccordances == null)
+			unresolvedAccordances = new LinkedHashSet<>();
+		unresolvedAccordances.add(definition);
+	}
+
+	public boolean needToResolveAccordances() {
+		return unresolvedAccordances.size() == 0;
+	}
+
+	public void resolveAccordances() { }
+
+	public void addKnownForms(String partOfSpeechName, Set<String> newForms) {
+		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
+		addKnownForms(partOfSpeech, newForms);
+	}
+
+	public void addKnownForms(PartOfSpeech partOfSpeech, Set<String> newForms) {
+		Set<String> forms = knownForms.getOrDefault(partOfSpeech, new LinkedHashSet<>());
+		forms.addAll(newForms);
+		knownForms.putIfAbsent(partOfSpeech, forms);
 	}
 //
 //	public String toString() {
 //		StringBuilder res = new StringBuilder();
 //		res.append(String.format("%s%n", charSeq));
-//		for (PartOfSpeech partOfSpeech: forms.keySet()){
+//		for (PartOfSpeech partOfSpeech: mapPOS.keySet()){
 //			res.append(String.format("\t: %s%n", partOfSpeech.partName));
 //			for(Definition definition : getDefinitions(partOfSpeech))
 //				res.append(String.format("\t\t- %s%n", definition));

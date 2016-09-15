@@ -35,8 +35,8 @@ public class PartOfSpeech implements Serializable, Comparable {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;
 		PartOfSpeech that = (PartOfSpeech) o;
-		if (lang.compareTo(that.lang) != 0) return false;
-		return partName.compareTo(that.partName) == 0;
+		if (!lang.equals(that.lang)) return false;
+		return partName.equalsIgnoreCase(that.partName);
 	}
 
 	@Override

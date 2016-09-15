@@ -49,7 +49,6 @@ public class DictionaryTest {
 		en.addVocabula("clog", "noun", "a shoe or sandal that has a thick usually wooden sole");
 		en.addVocabula("clog", "verb", "to slowly form a block in (something, such as a pipe " +
 				                               "or street) so that things cannot move through quickly or easily");
-		en.addVocabula("ASAP");
 		String newWord = "grape";
 		en.addVocabula(newWord, "noun", newWord);
 		ru.addVocabula("яблоко", "существительное", "округлый плод дерева семейства розоцветных, обычно " +
@@ -84,8 +83,8 @@ public class DictionaryTest {
 		DictionaryTest dt = new DictionaryTest();
 		try {
 			System.out.println(dt.en);
-			dt.testAddVocabula();
-			dt.testSave();
+//			dt.testAddVocabula();
+//			dt.testSave();
 			dt.testLoad();
 			System.out.println(dt.en.lookupDefinition("apple", "verb"));
 			System.out.println(dt.en.lookupDefinition("apple"));

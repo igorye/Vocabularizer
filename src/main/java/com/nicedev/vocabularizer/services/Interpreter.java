@@ -48,7 +48,7 @@ public class Interpreter {
 	private Set<String> translate(String entry, String partOfSpeechName, Dictionary dFrom, Dictionary dTo, Map<Integer, Integer> transform){
 		int entryID;
 		Set<String> translations = new TreeSet<>();
-		if (partOfSpeechName.equals(PartOfSpeech.ANY)) {
+		if (partOfSpeechName.equalsIgnoreCase(PartOfSpeech.ANY)) {
 			for(PartOfSpeech partOfSpeech: dFrom.getForms(entry))
 				translations.addAll(translate(entry, partOfSpeech.partName, dFrom, dTo, transform));
 			return translations;

@@ -4,8 +4,6 @@ import java.io.*;
 import java.util.*;
 import java.util.regex.Pattern;
 
-import static java.lang.String.format;
-
 public class Language implements Serializable, Comparable {
 
 	public final String langName;
@@ -36,16 +34,26 @@ public class Language implements Serializable, Comparable {
 		partsOfSpeech = loadPartsOfSpeech();
 	}
 
+	public Language(String langName, String shortName) {
+		this(langName, shortName, langs.get(langName).alphabet);
+	}
+
+	public Language(String langName) {
+		this(langName, langName.substring(0,3), langs.get(langName).alphabet);
+	}
+
+
 	private Map<String, PartOfSpeech> loadPartsOfSpeech() {
 		Properties langProps = new Properties();
 		String home = System.getProperties().getProperty("user.home");
 		Map<String, PartOfSpeech> partsOS = new TreeMap<>();
-		try (InputStream in = new FileInputStream(new File(home, format("%s.properties", langName)))) {
-			langProps.load(in);
+		try (InputStream in = new FileInputStream(new File(home, String.format("%s.properties", langName)))) {
+			langProps.loadFromXML(in);
 			int nPoS = 0;
 			String PoSName;
-			while ((PoSName = langProps.getProperty(format("name%d", ++nPoS))) != null) {
-				partsOS.put(PoSName, new PartOfSpeech(this, PoSName, PoSName.substring(0, 4)));
+			while ((PoSName = langProps.getProperty(String.format("name%d", ++nPoS))) != null) {
+				int len = Math.min(3, PoSName.length());
+				partsOS.put(PoSName, new PartOfSpeech(this, PoSName, PoSName.substring(0, len)));
 			}
 			partsOS.put(PartOfSpeech.ANY, new PartOfSpeech(this, PartOfSpeech.ANY));
 			partsOS.put(PartOfSpeech.UNDEFINED, new PartOfSpeech(this, PartOfSpeech.UNDEFINED));
@@ -53,13 +61,22 @@ public class Language implements Serializable, Comparable {
 		} catch (IOException e) {
 			System.err.format("Unable to read language configuration. %s.properties file is corrupt or missing at" +
 					                  " %s. %n", langName, home);
-			return Collections.<String, PartOfSpeech>emptyMap();
 		}
-		return Collections.unmodifiableMap(partsOS);
+		return partsOS;
 	}
 
-	public Language(String langName, String shortName) {
-		this(langName, shortName, langs.get(langName).alphabet);
+	private boolean savePartsOfSpeech() {
+		Properties langProps = new Properties();
+		final int[] i = {1};
+		partsOfSpeech.keySet().forEach( p -> langProps.put(String.format("name%d", i[0]++),p));
+		String home = System.getProperties().getProperty("user.home");
+//		Map<String, PartOfSpeech> partsOS = new TreeMap<>();
+		try (OutputStream out = new FileOutputStream(new File(home, String.format("%s.properties", langName)))) {
+			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
+		} catch (IOException e) {
+			System.err.format("Unable to write language configuration to %s\\%s.properties%n",  home, langName );
+		}
+		return true;
 	}
 
 	@Override
@@ -67,7 +84,7 @@ public class Language implements Serializable, Comparable {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;
 		Language language = (Language) o;
-		if (!langName.equals(language.langName)) return false;
+		if (!langName.equalsIgnoreCase(language.langName)) return false;
 		return alphabet.equals(language.alphabet);
 	}
 
@@ -98,11 +115,21 @@ public class Language implements Serializable, Comparable {
 	}
 
 	private static boolean CMLviaContains(String src, String langName) {
-		char[] examinedChars = src.toCharArray();
+		char[] examinedChars = src.toLowerCase().toCharArray();
 		Arrays.sort(examinedChars);
 		String alphabet = langs.get(langName).alphabet;
-		String probablyCorrectChar1 = String.valueOf(examinedChars[0]);
-		String probablyCorrectChar2 = String.valueOf(examinedChars[examinedChars.length - 1]);
+		int first = 0,
+			last = examinedChars.length - 1;
+		String regex = "[^\\p{L}]";
+		String probablyCorrectChar1 = String.valueOf(examinedChars[first]);
+		int wrongPos = (probablyCorrectChar1.matches(regex)) ? first : last;
+		if (wrongPos == first)
+			while (probablyCorrectChar1.matches(regex))
+				probablyCorrectChar1 = String.valueOf(examinedChars[++first]);
+		String probablyCorrectChar2 = String.valueOf(examinedChars[last]);
+		if (wrongPos == last)
+			while (probablyCorrectChar2.matches(regex))
+				probablyCorrectChar2 = String.valueOf(examinedChars[--last]);
 		return alphabet.contains(probablyCorrectChar1) && alphabet.contains(probablyCorrectChar2);
 	}
 
@@ -114,9 +141,19 @@ public class Language implements Serializable, Comparable {
 	@Override
 	public String toString() {
 		StringBuilder res = new StringBuilder();
-		res.append(format("%s(%s)%n", langName, shortName.length() != 0 ? shortName : langName.substring(0,2)));
-		res.append(partsOfSpeech.keySet());
-		res.append("\n");
+		String shortLngName = shortName.length() != 0 ? shortName : langName.substring(0,2);
+		res.append(String.format("Language: %s(%s)%n", langName, shortLngName))
+			.append(String.format("Available parts of speech: %s", partsOfSpeech.keySet()));
 		return res.toString();
+	}
+
+	public PartOfSpeech getPartOfSpeech(String partOfSpeechName) {
+		if (partOfSpeechName.isEmpty()) return new PartOfSpeech(this, PartOfSpeech.UNDEFINED);
+		PartOfSpeech partOfSpeech =
+				partsOfSpeech.getOrDefault(partOfSpeechName,
+						new PartOfSpeech(this, partOfSpeechName));
+		partsOfSpeech.putIfAbsent(partOfSpeechName, partOfSpeech);
+		savePartsOfSpeech();
+		return partOfSpeech;
 	}
 }
