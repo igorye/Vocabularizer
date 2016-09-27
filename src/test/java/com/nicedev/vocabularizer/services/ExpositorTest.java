@@ -29,6 +29,7 @@ public class ExpositorTest {
 		input = (args.length > 0)  ? new Scanner(args[0]) :  new Scanner(System.in);
 		String query;
 		int updateCount = 0;
+		String lastQuerry = "";
 		while (input.hasNext()) {
 			query = input.nextLine();
 			int defCount = en.getDefinitionCount();
@@ -39,6 +40,9 @@ public class ExpositorTest {
 					Dictionary.save(en, storageEn);
 				break;
 			}
+			if(query.equals("<"))
+				query = lastQuerry;
+			lastQuerry = query;
 			if (query.startsWith("-")) {
 				query = query.replaceFirst("-", "");
 				String[] tokens = query.split("\" ");
