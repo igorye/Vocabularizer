@@ -115,7 +115,8 @@ public class Language implements Serializable, Comparable {
 	}
 
 	private static boolean CMLviaContains(String src, String langName) {
-		char[] examinedChars = src.toLowerCase().toCharArray();
+		String copy = src.toLowerCase().replace("[^\\p{L}]", "");
+		char[] examinedChars = src.toCharArray();
 		Arrays.sort(examinedChars);
 		String alphabet = langs.get(langName).alphabet;
 		int first = 0,
@@ -124,11 +125,11 @@ public class Language implements Serializable, Comparable {
 		String probablyCorrectChar1 = String.valueOf(examinedChars[first]);
 		int wrongPos = (probablyCorrectChar1.matches(regex)) ? first : last;
 		if (wrongPos == first)
-			while (probablyCorrectChar1.matches(regex))
+			while (first < last &&  probablyCorrectChar1.matches(regex))
 				probablyCorrectChar1 = String.valueOf(examinedChars[++first]);
 		String probablyCorrectChar2 = String.valueOf(examinedChars[last]);
 		if (wrongPos == last)
-			while (probablyCorrectChar2.matches(regex))
+			while (last > 0 && probablyCorrectChar2.matches(regex))
 				probablyCorrectChar2 = String.valueOf(examinedChars[--last]);
 		return alphabet.contains(probablyCorrectChar1) && alphabet.contains(probablyCorrectChar2);
 	}

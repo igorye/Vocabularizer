@@ -175,12 +175,12 @@ public class Vocabula implements Serializable, Comparable {
 
 	public void resolveAccordances() { }
 
-	public void addKnownForms(String partOfSpeechName, Set<String> newForms) {
+	public void addKnownForms(String partOfSpeechName, Collection<String> newForms) {
 		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
 		addKnownForms(partOfSpeech, newForms);
 	}
 
-	public void addKnownForms(PartOfSpeech partOfSpeech, Set<String> newForms) {
+	public void addKnownForms(PartOfSpeech partOfSpeech, Collection<String> newForms) {
 		Set<String> forms = knownForms.getOrDefault(partOfSpeech, new LinkedHashSet<>());
 		forms.addAll(newForms);
 		knownForms.putIfAbsent(partOfSpeech, forms);

@@ -12,15 +12,16 @@ public class ExpositorTest {
 	static String home = System.getProperties().getProperty("user.home");
 	static String storageEn = String.format("%s\\%s.dict", home, "english");
 
+//	enum Command {DELETE, LIST, EXPLAIN, FIND}
+
 	public static void main(String[] args) {
 		Dictionary en = Dictionary.load("english", storageEn);
 		if (en == null) {
 			storageEn = storageEn.concat(".back");
 			en = Dictionary.load("english", storageEn);
-			if (en == null) {
+			if (en == null)
 				en = new Dictionary("english");
-				storageEn = storageEn.replace(".back", "");
-			}
+			storageEn = storageEn.replace(".back", "");
 		}
 		Expositor exp = new Expositor(en, false);
 		System.out.println(en);
@@ -71,22 +72,25 @@ public class ExpositorTest {
 				Vocabula vocabula;
 				if ((vocabula = en.getVocabula(query)) == null) {
 					vocabula = exp.getVocabula(query);
-					if (vocabula != null)
+					if (vocabula != null) {
 						en.addVocabula(vocabula);
-				}
-				if (vocabula != null) {
-					System.out.println(vocabula);
-					if(defCount != en.getDefinitionCount())
-						System.out.println(en);
-					if(++updateCount % 5 == 0)
-						Dictionary.save(en, storageEn);
-				}
+						System.out.printf("found: %s%n", vocabula.charSeq);
+					}
+				} else System.out.printf("found: %s%n", vocabula);
+
+				if(defCount != en.getDefinitionCount())
+					System.out.println(en);
+				if(++updateCount % 5 == 0)
+					Dictionary.save(en, storageEn);
+
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
 				Dictionary.save(en, storageEn);
 			}
 		}
+		//calling finalize is bad but it's a temporary approach to kill speller when we done
+		exp.finalize();
 	}
 	
 }

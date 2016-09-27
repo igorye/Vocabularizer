@@ -120,9 +120,10 @@ public class Dictionary implements Serializable{
 			//maybe use streaming through keySet
 			String filterLC = filter.toLowerCase();
 			articles.values().stream()
-					.filter(voc -> !filterLC.isEmpty()
-							               && (voc.charSeq.toLowerCase().contains(filterLC)
-									                   || filterLC.contains(voc.charSeq.toLowerCase())))
+					.filter(voc -> filterLC.isEmpty()
+							               || voc.charSeq.toLowerCase().matches(filterLC))
+//							               || voc.charSeq.toLowerCase().contains(filterLC)
+//							               || filterLC.contains(voc.charSeq.toLowerCase()))
 					.forEach(voc -> res.append(voc).append("\n"));
 		}
 		return res.toString();
@@ -136,9 +137,10 @@ public class Dictionary implements Serializable{
 		if (vocCount != 0) {
 			String filterLC = filter.toLowerCase();
 			articles.keySet().stream()
-					.filter(k -> !filterLC.isEmpty()
-							             && (k.toLowerCase().contains(filterLC)
-									                 || filterLC.contains(k.toLowerCase())))
+					.filter(k -> filterLC.isEmpty()
+										 ||k.toLowerCase().matches(filter))
+//							             || k.toLowerCase().contains(filterLC)
+//							             || filterLC.contains(k.toLowerCase()))
 					.forEach(k -> {
 						res.append(String.format("  %s %s%n", k, getForms(k)));
 						totalFound[0]++;
