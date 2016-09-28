@@ -1,7 +1,5 @@
 package com.nicedev.vocabularizer.dictionary;
 
-import com.sun.javaws.exceptions.InvalidArgumentException;
-import com.sun.javaws.exceptions.LaunchDescException;
 
 import java.io.*;
 import java.util.*;
@@ -30,9 +28,9 @@ public class Dictionary implements Serializable{
 		try (ObjectInput in = new ObjectInputStream(new GZIPInputStream(new FileInputStream(path)))){
 			 dictionary = (Dictionary) in.readObject();
 			if (!dictionary.language.langName.equalsIgnoreCase(langName))
-				throw new InvalidArgumentException(new String[]{String.format("Invalid target language: looking %s found %s",
-						langName, dictionary.language.langName)});
-		} catch (IOException | ClassNotFoundException | InvalidArgumentException e) {
+				throw new IllegalArgumentException(String.format("Invalid target language: looking %s found %s",
+						langName, dictionary.language.langName));
+		} catch (IOException | ClassNotFoundException | IllegalArgumentException e) {
 			System.err.printf("Unable to load \"%s\"%n%s%n", path, e.getLocalizedMessage());
 //			e.printStackTrace();
 		}

@@ -17,8 +17,10 @@ import java.util.concurrent.TransferQueue;
 public class Speller extends Thread {
 
 //	https://translate.google.al/translate_tts?ie=UTF-8&q=text&client=tw-ob&tl=en
-	//First %s is a service host. Second is a query to TTS
-	final private String requestFmt = "https://%s/translate_tts?ie=UTF-8&q=%s&client=tw-ob&tl=en-US";
+	//First %s is a service host. Second is a query to TTS. Third is accent
+	final private String requestFmt = "https://%s/translate_tts?ie=UTF-8&q=%s&client=tw-ob&tl=en-%s";
+	final private String[] accents = {"GB", "US"};
+	private int accent = 0;
 	private int delay;
 
 	private HostGenerator hGen;
@@ -56,7 +58,9 @@ public class Speller extends Thread {
 
 		public void removeRecentHost() {
 			suffixes.remove(next % suffixes.size());
-			System.out.printf("%d alive hosts%n", suffixes.size());
+			if (suffixes.size() <= 5)
+				enumHosts();
+			//System.out.printf("%d alive hosts%n", suffixes.size());
 		}
 
 		class AddrTester extends Thread {
@@ -135,9 +139,9 @@ public class Speller extends Thread {
 	public void spellGTTS(String wordToSpell) {
 		String request = null;
 		try {
-			request = String.format(requestFmt, hGen.nextHost(), URLEncoder.encode(wordToSpell, "UTF-8"));
+			request = String.format(requestFmt, hGen.nextHost(), URLEncoder.encode(wordToSpell, "UTF-8"), accents[accent % accents.length]);
 		} catch (UnsupportedEncodingException e) {
-			spellGTTS("Can not encode request");
+			spellGTTS("Can't encode request");
 		}
 		try (InputStream spellStream = requestSpellingStream(request)){
 			if (spellStream == null) {
@@ -163,7 +167,7 @@ public class Speller extends Thread {
 			return new BufferedInputStream(conn.getInputStream(), streamSize);
 		} catch (IOException e) {
 //			spellQueue.addFirst("Ouch");
-			System.out.println("Host removed");
+			//System.out.println("Host removed");
 		}
 		return null;
 	}
@@ -177,6 +181,10 @@ public class Speller extends Thread {
 		spell(wordsToSpell);
 	}
 
+	public void switchAccent() {
+		accent++;
+	}
+	
 	public void release(int releaseIn) {
 		limit = releaseIn;
 		isLimited = true;
