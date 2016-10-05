@@ -7,7 +7,7 @@ import java.util.Scanner;
 
 public class SpellerTest {
 	public static void main(String[] args) throws InterruptedException, FileNotFoundException {
-		Speller speller = new Speller();
+		SpellingService spellingService = new SpellingService(5, false);
 		Scanner in = new Scanner(args.length == 1 ? new FileInputStream(args[0]) : System.in);
 		while (in.hasNext()) {
 			String line = in.nextLine().trim();
@@ -18,10 +18,10 @@ public class SpellerTest {
 			} else request = line.split("[[^\\p{L}]&&[^\\s]]");
 			for(String tospell :request)
 			if(!tospell.isEmpty())
-				speller.spell(tospell);
+				spellingService.spell(tospell);
 		}
-		speller.release(5);
-		speller.join();
+		spellingService.release(5);
+		spellingService.join();
 	}
 	
 }

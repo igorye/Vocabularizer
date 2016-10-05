@@ -8,6 +8,7 @@ public class Vocabula implements Serializable, Comparable {
 	private final Language language;
 	final public String charSeq;
 	private String transcription;
+	private Set<String> spellings;
 	private Vocabula identicalTo;
 	public final boolean isComposite;
 	private Set<Definition> unresolvedAccordances = null;
@@ -44,6 +45,11 @@ public class Vocabula implements Serializable, Comparable {
 		Map.Entry<Vocabula, PartOfSpeech> mEntry = new AbstractMap.SimpleEntry<>(this, pos);
 		mapPOS.putIfAbsent(pos, definitions);
 		return definitions.add(new Definition(language, mEntry, meaning));
+	}
+
+	public void addSpelling(String source) {
+		if(spellings == null) spellings = new LinkedHashSet<>();
+		spellings.add(source);
 	}
 
 	public void addForms(Vocabula newVoc) {
@@ -185,15 +191,5 @@ public class Vocabula implements Serializable, Comparable {
 		forms.addAll(newForms);
 		knownForms.putIfAbsent(partOfSpeech, forms);
 	}
-//
-//	public String toString() {
-//		StringBuilder res = new StringBuilder();
-//		res.append(String.format("%s%n", charSeq));
-//		for (PartOfSpeech partOfSpeech: mapPOS.keySet()){
-//			res.append(String.format("\t: %s%n", partOfSpeech.partName));
-//			for(Definition definition : getDefinitions(partOfSpeech))
-//				res.append(String.format("\t\t- %s%n", definition));
-//		}
-//		return res.toString();
-//	}
+
 }
