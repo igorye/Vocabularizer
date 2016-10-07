@@ -81,8 +81,6 @@ public class SpellingService extends Thread {
 		public void shutdown() {
 			interrupted = true;
 			executor.shutdownNow();
-			System.err.printf("Executor: Shutting down%n");
-
 		}
 
 		private void enumHosts() {
@@ -270,25 +268,25 @@ public class SpellingService extends Thread {
 		public void save(String wordsToSpell) {
 			try {
 				SpellData spellData = new SpellData(wordsToSpell, accents[accent % accents.length], 0, 100);
-				spellSaveQueue.put(spellData);
+				saveQueue.put(spellData);
 			} catch (InterruptedException e) {
 				interrupted = true;
 			}
 		}
 
 		public void run() {
-			System.err.printf("Saver.run: STARTED%n");
 			while (!interrupted) {
+				if(isLimited)
+					interrupted = saveLimit-- == 0;
 				SpellData spellData = null;
 				try {
-					spellData = spellSaveQueue.take();
+					spellData = saveQueue.take();
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}
 				byte[] cache = new byte[4096];
 				try (InputStream in = new BufferedInputStream(requestProxy.requestSpellingStream(spellData));
 				     ByteArrayOutputStream baoStream = new ByteArrayOutputStream()) {
-					System.err.println(spellData.spellingSource);
 					int read;
 					while ((read = in.read(cache)) != -1)
 						baoStream.write(cache, 0, read);
@@ -299,8 +297,9 @@ public class SpellingService extends Thread {
 				try{
 					out.write(cache, 0, cache.length);
 					System.err.println(spellData);
+
 				} catch (IOException eOut) {
-					break;
+					interrupted = true;
 				}
 			}
 			try {
@@ -308,8 +307,6 @@ public class SpellingService extends Thread {
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			System.err.printf("Saver.run: Interrupted%n");
-
 		}
 	}
 
@@ -350,7 +347,7 @@ public class SpellingService extends Thread {
 //					System.out.printf("%d words to spell%n", spellQueue.size());
 				}
 			} catch (InterruptedException e) {
-				interrupted = true;
+				break;
 			}
 		}
 	}

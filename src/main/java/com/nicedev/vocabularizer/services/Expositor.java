@@ -147,7 +147,7 @@ public class Expositor {
 					if (!forms.isEmpty())
 						System.out.printf("    forms: %s%n", forms);
 					//definitions
-					Collection<SearchResult> definitions = findDefinitions(headWord.foundAt);
+					Collection<SearchResult> definitions = findDefinitions(headWord.entry , headWord.foundAt);
 					if (!definitions.isEmpty()) {
 						StringBuilder defContent = new StringBuilder();
 						for (SearchResult definition : definitions) {
@@ -240,7 +240,7 @@ public class Expositor {
 	}
 
 	public Collection<String> findUseCases(Node rootNode) throws XPathExpressionException {
-		String[] useCasesTags = {"vi", "snote"};
+		String[] useCasesTags = {"vi", "snote/vi"};
 		Collection<String> useCases = new ArrayList<>();
 		for(String useCasesTag: useCasesTags) {
 			NodeList nodes = (NodeList) xPath.evaluate(useCasesTag, rootNode, XPathConstants.NODESET);
@@ -254,7 +254,7 @@ public class Expositor {
 		return useCases;
 	}
 
-	public Collection<SearchResult> findDefinitions(Node rootNode) throws XPathExpressionException {
+	public Collection<SearchResult> findDefinitions(String entry, Node rootNode) throws XPathExpressionException {
 		String[] definitionTags = {"def/dt"/*, "def/dt/un"*/};
 		Collection<SearchResult> definitionsSR = new LinkedHashSet<>();
 		String definition;
@@ -265,31 +265,32 @@ public class Expositor {
 			for (int i = 0; i < defCount; i++) {
 				defBuilder.setLength(0);
 				Node currNode = defNodes.item(i).getFirstChild();
-				if (currNode.getNodeType() == Node.ELEMENT_NODE)
-					continue;
-				String definitionContents = extractNodeContents(defNodes.item(i));
-				String[] definitions = definitionContents.split(":");
-				boolean closeParenthesis = false;
-				for (int j = 0, first = 0; j < definitions.length; j++) {
-					boolean emptyDefinition = definitions[j].trim().isEmpty();
-					if (emptyDefinition){
-						first++;
-						continue;
+				if (currNode.getNodeType() != Node.ELEMENT_NODE) {
+					String definitionContents = extractNodeContents(defNodes.item(i));
+					String[] definitions = definitionContents.split(":");
+					boolean closeParenthesis = false;
+					for (int j = 0, first = 0; j < definitions.length; j++) {
+						boolean emptyDefinition = definitions[j].trim().isEmpty();
+						if (emptyDefinition){
+							first++;
+							continue;
+						}
+						if(j > first && !emptyDefinition) {
+							defBuilder.append(" (=");
+							closeParenthesis = true;
+						}
+						defBuilder.append(definitions[j].trim());
+						if(closeParenthesis) {
+							defBuilder.append(")");
+							closeParenthesis = false;
 					}
-					if(j > first && !emptyDefinition) {
-						defBuilder.append(" (=");
-						closeParenthesis = true;
-					}
-					defBuilder.append(definitions[j].trim());
-					if(closeParenthesis) {
-						defBuilder.append(")");
-						closeParenthesis = false;
-					}
+				}
 				}
 				SearchResult usageNote = findUsageNote(currNode.getParentNode());
 				Node useCasesRoot = currNode.getParentNode();
 				if(!usageNote.entry.isEmpty()) {
-					defBuilder.append(" - ").append(usageNote.entry);
+					if(defBuilder.length() != 0) defBuilder.append(" - ");
+					defBuilder.append(usageNote.entry);
 					useCasesRoot = usageNote.foundAt;
 				}
 				definition = defBuilder.toString();
@@ -408,13 +409,16 @@ public class Expositor {
 			int nodeCount = nodes.getLength();
 			for (int i = 0; i < nodeCount; i++) {
 				String currEntry = nodes.item(i).getTextContent().replace("*", "");
-				if (equalIgnoreCaseAndPunctuation(currEntry, queryLC)
-						    && hasDefinition(nodes.item(i).getParentNode()) || acceptFormRootsEntry) {
+				if (equalIgnoreCaseAndPunctuation(currEntry, queryLC) && hasDefinition(nodes.item(i).getParentNode())
+						    || acceptFormRootsEntry) {
 					entriesSR.add(new SearchResult(currEntry, nodes.item(i).getParentNode()));
 					if (acceptFormRootsEntry)
 						return entriesSR;
-				} else if (isSimilar(currEntry, queryLC))
+				} else if (isSimilar(currEntry, queryLC) && hasDefinition(nodes.item(i).getParentNode()))
 					similarsSR.add(new SearchResult(currEntry, nodes.item(i).getParentNode()));
+				if (findForms(nodes.item(i).getParentNode()).contains(query)) {
+					entriesSR.add(new SearchResult(queryLC, nodes.item(i).getParentNode()));
+				}
 				if (!acceptFormRootsEntry && !entriesSR.isEmpty()) continue;
 				Collection<String> forms = findForms(nodes.item(i).getParentNode());
 				for (String form: forms)
@@ -439,7 +443,7 @@ public class Expositor {
 		nDefinitions += ((Number) xPath.evaluate("count(def/dt/un)", rootNode, XPathConstants.NUMBER)).intValue();
 		//<utxt> means that there are some use cases thus definition will be composed as reference at parent node's entry
 		nDefinitions += ((Number) xPath.evaluate("count(utxt)", rootNode, XPathConstants.NUMBER)).intValue();
-		nDefinitions += ((Number) xPath.evaluate("count(dx)", rootNode, XPathConstants.NUMBER)).intValue();
+		nDefinitions += ((Number) xPath.evaluate("count(snote)", rootNode, XPathConstants.NUMBER)).intValue();
 		return nDefinitions != 0;
 	}
 
@@ -452,13 +456,19 @@ public class Expositor {
 			switch (child.getNodeType()){
 				case Node.ELEMENT_NODE:
 					switch (((Element)child).getTagName()) {
-						case "dxt":
 						case "it":
-						case "fw": content.append("<it>").append(extractNodeContents(child)).append("</it>"); break;
+						case "fw":
 						case "sx":
+						case "dxt":
+						case "phrase": content.append("<it>").append(extractNodeContents(child)).append("</it>"); break;
 						case "dx":
 						case "un":
 						case "vi": i = limit; break;
+						case "snote":
+							int length = content.toString().length();
+							if (length > 2) content.replace(length-1, length, ". ");
+							content.append(extractNodeContents(child));
+							break;
 						default:   content.append(extractNodeContents(child).replace("*",""));
 					}
 					break;

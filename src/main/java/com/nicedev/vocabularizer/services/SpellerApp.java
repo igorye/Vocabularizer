@@ -8,10 +8,8 @@ import java.util.*;
 
 
 public class SpellerApp {
-	public static BlockingQueue<String> spellingQueue = new LinkedBlockingQueue<>();
-	private static boolean interrupted;
 
-	public static void main(String[] args) throws InterruptedException, FileNotFoundException {
+	public static void main(String[] args) throws FileNotFoundException, InterruptedException {
 		Map<String, String> mArgs = parseArgs(args);
 		boolean bShowProgress = mArgs.containsKey("-p");
 		SpellingService spellingService = new SpellingService(5, bShowProgress);
@@ -22,21 +20,20 @@ public class SpellerApp {
 				              : outFileName.isEmpty() ? getDefaultOutName(inFileName)
 						                : outFileName;
 		boolean outIsFile = !outFileName.isEmpty();
-		WorkScheduler scheduler = new WorkScheduler(spellingService, outIsFile ? outFileName : "");
+		JobScheduler scheduler = new JobScheduler(spellingService, outIsFile ? outFileName : "");
 		Scanner in = inIsFile ? new Scanner(new FileReader(inFileName)) : new Scanner(System.in);
 		StringBuilder spellingBuilder = new StringBuilder();
 		String line = "";
 		while (in.hasNextLine()) {
 			line = "";
 			try {
-				line = in.nextLine();
+				line = in.nextLine().trim();
 				switch (line) {
 					case "~"    : spellingService.switchAccent(); continue;
 					case "!~"   : spellingService.resetAcent(); continue;
 					default     : spellingBuilder.append(line).append(" ");
 				}
 			} catch (NoSuchElementException e) {
-				System.err.printf("Exception!!! Scanner hasNextLine = %s%n", in.hasNextLine());
 				continue;
 			}
 			Collection<String> request = new ArrayList<>();
@@ -54,12 +51,15 @@ public class SpellerApp {
 		speller.join();
 	}
 
-	static class WorkScheduler extends Thread {
+	static class JobScheduler extends Thread {
 
 		private SpellingService spellingService;
 		private String outFileName;
+		public static TransferQueue<String> jobQueue = new LinkedTransferQueue<>();
+		private boolean inputIsEmpty = false;
 
-		public WorkScheduler(SpellingService worker, String outFileName) {
+
+		public JobScheduler(SpellingService worker, String outFileName) {
 			this.outFileName = outFileName;
 			this.spellingService = worker;
 			setName("Scheduler");
@@ -67,23 +67,37 @@ public class SpellerApp {
 		}
 
 		public void run() {
-			while (!interrupted) {
+			while (!inputIsEmpty || !jobQueue.isEmpty()) {
 				Collection<String> request;
-				String arg;
+				String toSpell;
 				try {
-					arg = spellingQueue.take();
-					request = split(arg.replaceAll("`", "'").replaceAll("\\*", ""),"(?<=\\p{L}{2,}[\\\\.] )", 0);
-					for (String tospell : request)
-						if (!tospell.isEmpty()) {
-							int delay = tospell.trim().endsWith(".") ? 300 : tospell.trim().endsWith(",") ? 100 : 0;
-							if (outFileName.isEmpty()) spellingService.spell(tospell, delay);
-							else spellingService.save(tospell, outFileName);
+					toSpell = jobQueue.take();
+					request = split(toSpell.replaceAll("`", "'").replaceAll("\\*", ""),"(?<=\\p{L}{2,}[\\\\.] )", 0);
+					for (String token : request)
+						if (!token.isEmpty()) {
+							int delay = token.trim().endsWith(".") ? 300 : token.trim().endsWith(",") ? 50 : 0;
+							if (outFileName.isEmpty()) spellingService.spell(token, delay);
+							else spellingService.save(token, outFileName);
 						}
 				} catch (InterruptedException e) {
 					break;
 				}
 			}
-//			System.err.printf("Scheduler: interrupted = %s%n", interrupted);
+
+		}
+
+		public void schedule(String work) {
+			try {
+				jobQueue.put(work);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+
+		public void release() {
+			inputIsEmpty = true;
+			Thread.yield();
+			if (jobQueue.isEmpty()) interrupt();
 		}
 	}
 
@@ -114,7 +128,7 @@ public class SpellerApp {
 		}
 		return mArgs;
 	}
-	
+
 	private static Collection<String> split(String line, String splitter, int nextRule) {
 		String[] splitRules = {"(?<=\\\\.{2,3} )", "(?<=[\\(\\)])", "(?> \'\\w+\' )", "(?> \"\\w+\" )", "(?<=[,:;])", "(?= - )", "\\s"};
 		List<String> res = new ArrayList<>();
