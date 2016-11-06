@@ -15,12 +15,12 @@ public class PartOfSpeech implements Serializable, Comparable {
 
 
 
-	public PartOfSpeech(Language lang) {
-		this(lang, UNDEFINED, "");
+	public PartOfSpeech(Language language) {
+		this(language, UNDEFINED, "");
 	}
 
-	public PartOfSpeech(Language lang, String partName, String shortName) {
-		this.lang = lang;
+	public PartOfSpeech(Language language, String partName, String shortName) {
+		this.lang = language;
 		this.partName = partName;
 		this.shortName = shortName;
 		this.correspondsTo = null;

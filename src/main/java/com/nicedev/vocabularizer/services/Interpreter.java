@@ -49,7 +49,7 @@ public class Interpreter {
 		int entryID;
 		Set<String> translations = new TreeSet<>();
 		if (partOfSpeechName.equalsIgnoreCase(PartOfSpeech.ANY)) {
-			for(PartOfSpeech partOfSpeech: dFrom.getForms(entry))
+			for(PartOfSpeech partOfSpeech: dFrom.getPartsOfSpeech(entry))
 				translations.addAll(translate(entry, partOfSpeech.partName, dFrom, dTo, transform));
 			return translations;
 		}
@@ -59,7 +59,7 @@ public class Interpreter {
 				if (entryID != 0) {
 					Integer id = transform.get(entryID);
 					Vocabula vocabulaFromMeaning = dTo.getVocabulaFromMeaning(id);
-					translations.add(vocabulaFromMeaning.charSeq);
+					translations.add(vocabulaFromMeaning.headWord);
 				}
 			}
 		return Collections.unmodifiableSet(translations);

@@ -1,8 +1,13 @@
 package com.nicedev.vocabularizer.dictionary;
 
 
+import javax.swing.text.StringContent;
+import javax.swing.text.html.HTML;
 import java.io.*;
 import java.util.*;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -32,11 +37,9 @@ public class Dictionary implements Serializable{
 						langName, dictionary.language.langName));
 		} catch (IOException | ClassNotFoundException | IllegalArgumentException e) {
 			System.err.printf("Unable to load \"%s\"%n%s%n", path, e.getLocalizedMessage());
-//			e.printStackTrace();
 		}
-		if (dictionary != null && dictionary.articles.size() != 0) {
+		if (dictionary != null && !dictionary.articles.isEmpty()) {
 			dictionary.updateStatistics();
-			System.out.println(dictionary.language);
 		}
 		return dictionary;
 	}
@@ -65,7 +68,7 @@ public class Dictionary implements Serializable{
 				                   .getOrDefault(partOfSpeechName, new PartOfSpeech(language, PartOfSpeech.UNDEFINED));
 		articles.putIfAbsent(newEntry, voc);
 		index.putIfAbsent(explanatory.hashCode(), voc);
-		boolean res = voc.addForm(pos.partName, explanatory);
+		boolean res = voc.addPartOfSpeech(pos.partName, explanatory);
 		updateStatistics();
 		return res;
 	}
@@ -79,16 +82,20 @@ public class Dictionary implements Serializable{
 	}
 
 	public boolean addVocabula(Vocabula newVoc) {
-		Vocabula vocabula = articles.get(newVoc.charSeq);
+		Vocabula vocabula = articles.get(newVoc.headWord);
 		if (vocabula != null){
 			//copy to prevent concurrent modification exception
 			Set<PartOfSpeech> formsCopy = new TreeSet<>(newVoc.mapPOS.keySet());
-			formsCopy.forEach(form -> addVocabula(newVoc.charSeq, form.partName, newVoc.mapPOS.get(form)));
+			formsCopy.forEach(form -> addVocabula(newVoc.headWord, form.partName, newVoc.mapPOS.get(form)));
 			vocabula.setTranscription(newVoc.getTranscription());
 		} else
-			articles.put(newVoc.charSeq, newVoc);
+			articles.put(newVoc.headWord, newVoc);
 		updateStatistics();
 		return true;
+	}
+
+	public void addVocabulas(Collection<Vocabula> newVocabulas) {
+		newVocabulas.forEach(this::addVocabula);
 	}
 
 	public void removeVocabula(String charSeq) {
@@ -100,7 +107,7 @@ public class Dictionary implements Serializable{
 			articles.remove(charSeq);
 		else {
 			Vocabula vocabula = articles.get(charSeq);
-			if (vocabula != null) vocabula.removeForm(partOfSpeechName);
+			if (vocabula != null) vocabula.removePartOfSpeech(partOfSpeechName);
 		}
 		updateStatistics();
 	}
@@ -109,49 +116,58 @@ public class Dictionary implements Serializable{
 		return true;
 	}
 
+	public Collection<Vocabula> getVocabulas(String matching) {
+		Collection<Vocabula> matches = new ArrayList<>();
+		if (getVocabulaCount() != 0) {
+			//maybe use streaming through keySet
+			String filterLC = matching.toLowerCase();
+			if(filterLC.matches("\\p{Punct}"))
+				filterLC = String.join("", "\\", filterLC);
+			final String finalFilterLC = filterLC;
+			articles.values().stream()
+					.filter(voc -> finalFilterLC.isEmpty() || voc.headWord.toLowerCase().matches(finalFilterLC))
+					.forEach(matches::add);
+		}
+		return  matches;
+	}
+
 	public String explainVocabula(String filter) {
 		StringBuilder res = new StringBuilder();
 		int vocCount = getVocabulaCount();
 		if (vocCount != 0) {
-			String fmt = filter.length() > 0 ? String.format(" starting on \"%s\"", filter) : "";
-			res.append(String.format("Thesaurus%s:%n", fmt));
 			//maybe use streaming through keySet
 			String filterLC = filter.toLowerCase();
+			if(filterLC.matches("\\p{Punct}"))
+				filterLC = String.join("", "\\", filterLC);
+			final String finalFilterLC = filterLC;
 			articles.values().stream()
-					.filter(voc -> filterLC.isEmpty()
-							               || voc.charSeq.toLowerCase().matches(filterLC))
-//							               || voc.charSeq.toLowerCase().contains(filterLC)
-//							               || filterLC.contains(voc.charSeq.toLowerCase()))
+					.filter(voc -> finalFilterLC.isEmpty()
+							               || voc.headWord.toLowerCase().matches(finalFilterLC))
 					.forEach(voc -> res.append(voc).append("\n"));
 		}
 		return res.toString();
 	}
 
-	public String listVocabula(String filter) {
-		StringBuilder res = new StringBuilder();
-		int vocCount = getVocabulaCount();
-		String fmt = filter.length() > 0 ? String.format(" starting on \"%s\"", filter) : "";
-		final int[] totalFound = {0};
-		if (vocCount != 0) {
-			String filterLC = filter.toLowerCase();
-			articles.keySet().stream()
-					.filter(k -> filterLC.isEmpty()
-										 ||k.toLowerCase().matches(filter))
-//							             || k.toLowerCase().contains(filterLC)
-//							             || filterLC.contains(k.toLowerCase()))
-					.forEach(k -> {
-						res.append(String.format("  %s %s%n", k, getForms(k)));
-						totalFound[0]++;
-					});
-			if (totalFound[0] != 0)
-				res.append(String.format("total %d entr%s%n", totalFound[0], totalFound[0] > 1 ? "ies" : "y"));
+	public Collection<String> listVocabula(String filter) {
+		if (getVocabulaCount() != 0) {
+			String filterLC = String.join("\\", filter.split("(?=\\(|\\))")).toLowerCase();
+			return articles.keySet().stream().filter(k -> filterLC.isEmpty() || k.toLowerCase().contains(filterLC))
+					                                 .collect(Collectors.toList());
 		}
-		res.insert(0, totalFound[0] != 0 ? String.format("Found%s:%n", fmt) : "Nothing found\n");
-		return res.toString();
+		return  Collections.emptyList();
+	}
+
+	private boolean validPattern(String filter) {
+		try {
+			Pattern p = Pattern.compile(filter);
+		} catch (PatternSyntaxException e) {
+			return true;
+		}
+		return false;
 	}
 
 	public String toString(){
-		return String.format("Vocabulas: %d%nDefinitions: %d%n", getVocabulaCount(), getDefinitionCount());
+		return String.format("Vocabulas: %d | Definitions: %d", getVocabulaCount(), getDefinitionCount());
 	}
 
 	public int lookupDefinitionEntry(String entry, String partOfSpeechName, String explanatory) {
@@ -182,10 +198,10 @@ public class Dictionary implements Serializable{
 	private String lookupDefinition(Vocabula voc, PartOfSpeech partOfSpeech) {
 		StringBuilder res = new StringBuilder();
 		if (partOfSpeech.partName.equals(PartOfSpeech.ANY)) {
-			for(PartOfSpeech pos: articles.get(voc.charSeq).mapPOS.keySet())
+			for(PartOfSpeech pos: articles.get(voc.headWord).mapPOS.keySet())
 					res.append(lookupDefinition(voc, pos));
 		} else
-			articles.get(voc.charSeq).getDefinitions(partOfSpeech).forEach(res::append);
+			articles.get(voc.headWord).getDefinitions(partOfSpeech).forEach(res::append);
 
 		return res.toString();
 	}
@@ -194,7 +210,7 @@ public class Dictionary implements Serializable{
 		return index.get(ID);
 	}
 
-	public Set<PartOfSpeech> getForms(String entry) {
+	public Set<PartOfSpeech> getPartsOfSpeech(String entry) {
 		Vocabula voc = articles.get(entry);
 		if (voc == null)
 			return Collections.<PartOfSpeech>emptySet();

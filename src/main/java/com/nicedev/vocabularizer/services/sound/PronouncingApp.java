@@ -1,4 +1,6 @@
-package com.nicedev.vocabularizer.services;
+package com.nicedev.vocabularizer.services.sound;
+
+import com.nicedev.vocabularizer.services.sound.PronouncingService;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -7,12 +9,12 @@ import java.nio.file.Paths;
 import java.util.*;
 
 
-public class SpellerApp {
+public class PronouncingApp {
 
 	public static void main(String[] args) throws FileNotFoundException, InterruptedException {
 		Map<String, String> mArgs = parseArgs(args);
 		boolean bShowProgress = mArgs.containsKey("-p");
-		SpellingService spellingService = new SpellingService(5, bShowProgress);
+		PronouncingService pronouncingService = new PronouncingService(5, bShowProgress);
 		String inFileName = mArgs.getOrDefault("-i", "");
 		boolean inIsFile = !inFileName.isEmpty();
 		String outFileName = mArgs.get("-o");
@@ -20,7 +22,7 @@ public class SpellerApp {
 				              : outFileName.isEmpty() ? getDefaultOutName(inFileName)
 						                : outFileName;
 		boolean outIsFile = !outFileName.isEmpty();
-		JobScheduler scheduler = new JobScheduler(spellingService, outIsFile ? outFileName : "");
+		JobScheduler scheduler = new JobScheduler(pronouncingService, outIsFile ? outFileName : "");
 		Scanner in = inIsFile ? new Scanner(new FileReader(inFileName)) : new Scanner(System.in);
 		StringBuilder spellingBuilder = new StringBuilder();
 		String line = "";
@@ -29,8 +31,8 @@ public class SpellerApp {
 			try {
 				line = in.nextLine().trim();
 				switch (line) {
-					case "~"    : spellingService.switchAccent(); continue;
-					case "!~"   : spellingService.resetAcent(); continue;
+					case "~"    : pronouncingService.switchAccent(); continue;
+					case "!~"   : pronouncingService.resetAcent(); continue;
 					default     : spellingBuilder.append(line).append(" ");
 				}
 			} catch (NoSuchElementException e) {
@@ -53,15 +55,15 @@ public class SpellerApp {
 
 	static class JobScheduler extends Thread {
 
-		private SpellingService spellingService;
+		private PronouncingService pronouncingService;
 		private String outFileName;
 		public static TransferQueue<String> jobQueue = new LinkedTransferQueue<>();
 		private boolean inputIsEmpty = false;
 
 
-		public JobScheduler(SpellingService worker, String outFileName) {
+		public JobScheduler(PronouncingService worker, String outFileName) {
 			this.outFileName = outFileName;
-			this.spellingService = worker;
+			this.pronouncingService = worker;
 			setName("Scheduler");
 			start();
 		}
@@ -69,15 +71,15 @@ public class SpellerApp {
 		public void run() {
 			while (!inputIsEmpty || !jobQueue.isEmpty()) {
 				Collection<String> request;
-				String toSpell;
+				String toPronounce;
 				try {
-					toSpell = jobQueue.take();
-					request = split(toSpell.replaceAll("`", "'").replaceAll("\\*", ""),"(?<=\\p{L}{2,}[\\\\.] )", 0);
+					toPronounce = jobQueue.take();
+					request = split(toPronounce.replaceAll("`", "'").replaceAll("\\*", ""),"(?<=\\p{L}{2,}[\\\\.] )", 0);
 					for (String token : request)
 						if (!token.isEmpty()) {
 							int delay = token.trim().endsWith(".") ? 300 : token.trim().endsWith(",") ? 50 : 0;
-							if (outFileName.isEmpty()) spellingService.spell(token, delay);
-							else spellingService.save(token, outFileName);
+							if (outFileName.isEmpty()) pronouncingService.pronounce(token, delay);
+							else pronouncingService.save(token, outFileName);
 						}
 				} catch (InterruptedException e) {
 					break;
@@ -102,7 +104,7 @@ public class SpellerApp {
 	}
 
 	private static String getDefaultOutName(String inFileName) {
-		String defaultOutFileName = inFileName.isEmpty() ? "spelling.mp3"
+		String defaultOutFileName = inFileName.isEmpty() ? "pronunciation.mp3"
 				                            : inFileName.replaceAll("((?<=\\w+\\.)\\w+$)", "").concat("mp3");
 		Path path = Paths.get(defaultOutFileName);
 		defaultOutFileName = path.getName(path.getNameCount() - 1).toString();
@@ -130,7 +132,8 @@ public class SpellerApp {
 	}
 
 	private static Collection<String> split(String line, String splitter, int nextRule) {
-		String[] splitRules = {"(?<=\\\\.{2,3} )", "(?<=[\\(\\)])", "(?> \'\\w+\' )", "(?> \"\\w+\" )", "(?<=[,:;])", "(?= - )", "\\s"};
+		String[] splitRules = {"(?<=\\\\.{2,3} )", "(?=\\()", "(?<=\\)[,:;]{0,1})", "(?> \'\\w+\' )",
+								"(?> \"\\w+\" )", "(?<=[,:;])", "(?= - )", "\\s"};
 		List<String> res = new ArrayList<>();
 		String[] tokens = line.split(splitter);
 		for (String token: tokens) {
