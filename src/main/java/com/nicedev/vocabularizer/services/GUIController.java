@@ -24,6 +24,8 @@ import javafx.stage.Window;
 
 import java.net.URL;
 import java.util.*;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class GUIController implements Initializable{
@@ -37,6 +39,8 @@ public class GUIController implements Initializable{
 	private WebEngine engine;
 
 	private int updateCount = 0;
+	private static final String WH_REQUEST_URL = "http://wooordhunt.ru/word/%s";
+	private final String GT_REQUEST_URL = "https://translate.google.com/#%s/%s/%s";
 	private String lastQuery = "";
 	private String home = System.getProperties().getProperty("user.home");
 	private String storageEn = String.format("%s\\%s.dict", home, "english");
@@ -74,7 +78,7 @@ public class GUIController implements Initializable{
 
 	private void setSceneCursor(Cursor cursor) {
 		mainScene.setCursor(cursor);
-		view.setCursor(cursor);
+		requestView.setCursor(cursor);
 	}
 
 	@FXML
@@ -83,14 +87,14 @@ public class GUIController implements Initializable{
 		String recent = "";
 		if (query.matches(".*\\W.*")) lastQuery = query;
 		EventType eventType = event.getEventType();
-		Node targetNode = (Node) event.getSource();
+		Node sourceNode = (Node) event.getSource();
 		if (eventType == KeyEvent.KEY_RELEASED) {
 			boolean hasHistory = !history.isEmpty();
 			switch (((KeyEvent)event).getCode()) {
 				case ENTER:
-					if (targetNode instanceof TextField)
+					if (sourceNode instanceof TextField)
 						handleQuery(query);
-					else if (targetNode instanceof WebView)
+					else if (sourceNode instanceof WebView)
 						handleQuery(getViewSelection());
 					queryText.setText("");
 					break;
@@ -137,7 +141,7 @@ public class GUIController implements Initializable{
 	}
 
 	private String getViewSelection() {
-		return (String) engine.executeScript("window.getSelection().toString()");
+		return ((String) engine.executeScript("window.getSelection().toString()")).trim();
 	}
 
 	@FXML
@@ -148,25 +152,31 @@ public class GUIController implements Initializable{
 
 	//stackoverflow-impl
 	private PopupWindow updateContextMenu(){
+		String selection = getViewSelection();
+		if(selection.isEmpty()) return null;
 		@SuppressWarnings("deprecation")
 		final Iterator<Window> windows = Window.impl_getWindows();
 		while (windows.hasNext()) {
 			final Window window = windows.next();
 			if (window instanceof ContextMenu) {
-				if(window.getScene()!=null && window.getScene().getRoot()!=null) {
+				if(window.getScene() != null && window.getScene().getRoot() != null) {
 					Parent root = window.getScene().getRoot();
 					// access to context menu content
-					if(root.getChildrenUnmodifiable().size()>0) {
+					if(root.getChildrenUnmodifiable().size() > 0) {
 						Node popup = root.getChildrenUnmodifiable().get(0);
-						if(popup.lookup(".context-menu")!=null) {
+						if(popup.lookup(".context-menu") != null) {
 							Node bridge = popup.lookup(".context-menu");
 							ContextMenuContent cmc = (ContextMenuContent)((Parent)bridge).getChildrenUnmodifiable().get(0);
 							// adding new item:
 							MenuItem menuItem = new MenuItem("Explain");
-							String selection = getViewSelection();
-							if(selection.isEmpty()) return null;
 							menuItem.setOnAction(e -> handleQuery(selection));
+							cmc.getItemsContainer().getChildren().add(cmc.new MenuItemContainer(menuItem));
 							// add new item:
+							menuItem = new MenuItem("Translate via Google");
+							menuItem.setOnAction(e -> showTranslation(selection, requestFormatterGT));
+							cmc.getItemsContainer().getChildren().add(cmc.new MenuItemContainer(menuItem));
+							menuItem = new MenuItem("Translate via WooordHunt");
+							menuItem.setOnAction(e -> showTranslation(selection, requestFormatterWH));
 							cmc.getItemsContainer().getChildren().add(cmc.new MenuItemContainer(menuItem));
 							menuItem = new MenuItem("Pronounce");
 							menuItem.setOnAction(e -> pronouncingService.pronounce(selection));
@@ -182,6 +192,21 @@ public class GUIController implements Initializable{
 			}
 		}
 		return null;
+	}
+
+	Function<String, String> requestFormatterWH = s -> String.format(WH_REQUEST_URL, s);
+
+	Function<String, String> requestFormatterGT = s -> String.format(GT_REQUEST_URL, en.language.shortName,
+																Locale.getDefault().getLanguage(), s);
+
+	private void showTranslation(String selection, Function<String, String> requestFormatter) {
+		translateTab.setText(getTrimedString(selection, 30));
+		tabPane.getSelectionModel().select(translateTab);
+		String textToTranslate = selection.replaceAll("\\s", " ");
+		translationTooltip.setText(textToTranslate);
+		translateTab.setTooltip(translationTooltip);
+		translateView.getEngine().load(requestFormatter.apply(textToTranslate));
+		queryTabInactive = true;
 	}
 
 	private void deleteHeadword(String selection) {
@@ -224,11 +249,8 @@ public class GUIController implements Initializable{
 			history.add(fQuery[0]);
 			setSceneCursor(Cursor.WAIT);
 			int defCount = en.getDefinitionCount();
-			fQuery[0] = Arrays.asList(fQuery[0].trim().split("\n")).stream().filter(s -> !s.trim().isEmpty()).findFirst().orElse("");
-			int trimPos = fQuery[0].indexOf('[');
-			if (trimPos > 0)
-				fQuery[0] = fQuery[0].substring(0, fQuery[0].indexOf('[')).trim();
-			if (fQuery[0].trim().length() == 0) return;
+			fQuery[0] = filterRequest(fQuery[0]);
+			if (fQuery[0].isEmpty()) return;
 			try {
 				fQuery[0] = fQuery[0].split("\\s{2,}|\t")[0];
 				Vocabula vocabula;
@@ -255,7 +277,6 @@ public class GUIController implements Initializable{
 				}
 				if (defCount != en.getDefinitionCount()) stats.setText(en.toString());
 				if (++updateCount % 5 == 0) Dictionary.save(en, storageEn);
-
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
@@ -281,11 +302,9 @@ public class GUIController implements Initializable{
 	}
 
 	private Collection<Vocabula> findVocabula(String query, boolean lookupSimilar) {
-		for(Expositor expositor: expositors) {
-			Collection<Vocabula>found = expositor.getVocabula(query, lookupSimilar);
-			if(!found.isEmpty()) return found;
-		}
-		return Collections.emptyList();
+		return Arrays.asList(expositors).parallelStream()
+				       .map(expositor -> expositor.getVocabula(query, lookupSimilar))
+				       .collect(HashSet::new, Collection::addAll, Collection::addAll);
 	}
 
 	private void pronounce(Vocabula vocabula) {
@@ -305,6 +324,12 @@ public class GUIController implements Initializable{
 //				                                   "<script src='%s'></script>" +
 					                                   "</head>\n<body>\n%s</body>\n</html>", cssHref, body);
 			engine.loadContent(htmlContent);
+			String tabText = lastQuery;
+			queryTab.setText(getTrimedString(tabText, 30));
+			if (queryTabInactive) {
+				tabPane.getSelectionModel().select(queryTab);
+				queryTabInactive = false;
+			}
 			setSceneCursor(Cursor.DEFAULT);
 		});
 	}
@@ -313,7 +338,7 @@ public class GUIController implements Initializable{
 		if(collection.isEmpty()) return "Nothing found";
 		StringBuilder content = new StringBuilder("");
 		boolean emphasisQuery = args.length > 0;
-		Collection<String> list = collection;
+		List<String> list = new LinkedList<>(collection);
 		if(emphasisQuery) {
 			list = collection.stream().filter(s -> s.startsWith(args[0])).sorted().collect(Collectors.toList());
 			list.addAll(collection.stream().filter(s -> !s.startsWith(args[0])).sorted().collect(Collectors.toList()));

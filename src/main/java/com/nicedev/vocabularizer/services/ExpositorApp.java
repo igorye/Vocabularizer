@@ -7,6 +7,7 @@ import com.nicedev.vocabularizer.dictionary.Vocabula;
 import com.nicedev.vocabularizer.services.sound.PronouncingService;
 
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class ExpositorApp {
@@ -70,12 +71,9 @@ public class ExpositorApp {
 				continue;
 			}
 			try {
-			String[] tokens = query.split("\\s{2,}|\t");
-				query = tokens[0];
-				if (! Language.charsMatchLanguage(query.replace("\"",""), en.language)) {
-					System.out.printf("Error: query has an invalid char - \"%s\"%n", query);
-					continue;
-				}
+				String[] tokens = query.split("\\s{2,}|\t|\\[");
+				Predicate<String> isEmpty = String::isEmpty;
+				query = Arrays.asList(tokens).stream().filter(isEmpty.negate()).map(String::trim).findFirst().orElse("");
 				Vocabula vocabula;
 				Collection<Vocabula> vocabulas;
 				if ((vocabula = en.getVocabula(query)) == null) {
@@ -128,11 +126,9 @@ public class ExpositorApp {
 	}
 
 	private static Collection<Vocabula> getVocabula(String query) {
-		for(Expositor expositor: expositors) {
-			Collection<Vocabula> vocabulas = expositor.getVocabula(query, true);
-			if(!vocabulas.isEmpty()) return vocabulas;
-		}
-		return Collections.emptyList();
+		return Arrays.asList(expositors).parallelStream()
+				       .map(expositor -> expositor.getVocabula(query, true))
+				       .collect(HashSet::new, Collection::addAll, Collection::addAll);
 	}
 
 	private static void pronunciate(Vocabula vocabula) {

@@ -22,7 +22,7 @@ public class Dictionary implements Serializable{
 
 
 	public Dictionary(String lang) {
-		this.language = new Language(lang, "");
+		this.language = new Language(lang);
 		articles = new TreeMap<>();
 		index = new TreeMap<>();
 //		locale = new Locale(language.langName.toLowerCase());
@@ -159,11 +159,11 @@ public class Dictionary implements Serializable{
 
 	private boolean validPattern(String filter) {
 		try {
-			Pattern p = Pattern.compile(filter);
+			Pattern.compile(filter);
 		} catch (PatternSyntaxException e) {
-			return true;
+			return false;
 		}
-		return false;
+		return true;
 	}
 
 	public String toString(){

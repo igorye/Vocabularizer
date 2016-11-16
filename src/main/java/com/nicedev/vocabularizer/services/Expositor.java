@@ -113,8 +113,7 @@ public class Expositor {
 			for (SearchResult headWordSR : headWords) {
 				Collection<String> pronunciationURLs = findPronunciation(headWordSR);
 				SearchResult transcription = new SearchResult("", null);
-				if (!headWordSR.entry.matches("\\w+(\\s\\w+)+") && headWordSR.perfectMatch)
-					transcription = findTranscription(headWordSR.foundAt);
+				transcription = findTranscription(headWordSR.foundAt);
 				if (newVoc == null || newVoc != null && !newVoc.headWord.equals(headWordSR.entry)) {
 					if(newVoc != null) extracted.add(newVoc);
 					newVoc = new Vocabula(headWordSR.entry, language, transcription.entry);
@@ -426,7 +425,7 @@ public class Expositor {
 								closeParenthesis = false;
 							}
 						}
-					}
+//					}
 					SearchResult usageNote = findUsageNote(currNode.getParentNode());
 					Node useCasesRoot = currNode.getParentNode();
 					if(!usageNote.entry.isEmpty()) {

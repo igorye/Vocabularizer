@@ -22,8 +22,8 @@ public class Language implements Serializable, Comparable {
 		String lang1 = "english";
 		String lang2 = "russian";
 		langs = new TreeMap<>();
-		langs.put(lang1, new Language(lang1, "", ENGLISH_ALPHABET));
-		langs.put(lang2, new Language(lang2, "", RUSSIAN_ALPHABET));
+		langs.put(lang1, new Language(lang1, "en", ENGLISH_ALPHABET));
+		langs.put(lang2, new Language(lang2, "ru", RUSSIAN_ALPHABET));
 	}
 
 	public Language(String langName, String shortName, String alphabet) {
