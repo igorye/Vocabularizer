@@ -28,19 +28,19 @@ public class Interpreter {
 		fToN = new TreeMap<>();
 	}
 
-	public void addTranslation(String nEntry, String nPartOSName, String nExplanatory,
-	                           String fEntry, String fPartOSName, String fExplanatory) {
-		int nEntryID = dictNative.lookupDefinitionEntry(nEntry, nPartOSName, nExplanatory);
-		assert (nEntryID == dictNative.lookupDefinitionEntry(nExplanatory));
-		int fEntryID = dictForeign.lookupDefinitionEntry(fEntry, fPartOSName, fExplanatory);
-		assert (fEntryID == dictForeign.lookupDefinitionEntry(fExplanatory));
+	public void addTranslation(String nEntry, String nPartOSName, String nExplanation,
+	                           String fEntry, String fPartOSName, String fExplanation) {
+		int nEntryID = dictNative.lookupDefinitionEntry(nEntry, nPartOSName, nExplanation);
+		assert (nEntryID == dictNative.lookupDefinitionEntry(nExplanation));
+		int fEntryID = dictForeign.lookupDefinitionEntry(fEntry, fPartOSName, fExplanation);
+		assert (fEntryID == dictForeign.lookupDefinitionEntry(fExplanation));
 		nToF.put(nEntryID, fEntryID);
 		fToN.put(fEntryID, nEntryID);
 	}
 
-	public void addTranslation(String nExplanatory, String fExplanatory) {
-		int nEntryID = dictNative.lookupDefinitionEntry(nExplanatory);
-		int fEntryID = dictForeign.lookupDefinitionEntry(fExplanatory);
+	public void addTranslation(String nExplanation, String fExplanation) {
+		int nEntryID = dictNative.lookupDefinitionEntry(nExplanation);
+		int fEntryID = dictForeign.lookupDefinitionEntry(fExplanation);
 		nToF.put(nEntryID, fEntryID);
 		fToN.put(fEntryID, nEntryID);
 	}
@@ -54,8 +54,8 @@ public class Interpreter {
 			return translations;
 		}
 		for(Definition definition : dFrom.getDefinitions(entry, partOfSpeechName))
-			if (transform.get(definition.explanatory.hashCode()) != null) {
-				entryID = dFrom.lookupDefinitionEntry(definition.explanatory);
+			if (transform.get(definition.explanation.hashCode()) != null) {
+				entryID = dFrom.lookupDefinitionEntry(definition.explanation);
 				if (entryID != 0) {
 					Integer id = transform.get(entryID);
 					Vocabula vocabulaFromMeaning = dTo.getVocabulaFromMeaning(id);

@@ -11,6 +11,8 @@ import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+import static java.util.stream.Collectors.toList;
+
 public class Dictionary implements Serializable{
 
 	final public Language language;
@@ -152,7 +154,7 @@ public class Dictionary implements Serializable{
 		if (getVocabulaCount() != 0) {
 			String filterLC = String.join("\\", filter.split("(?=\\(|\\))")).toLowerCase();
 			return articles.keySet().stream().filter(k -> filterLC.isEmpty() || k.toLowerCase().contains(filterLC))
-					                                 .collect(Collectors.toList());
+					                                 .collect(toList());
 		}
 		return  Collections.emptyList();
 	}

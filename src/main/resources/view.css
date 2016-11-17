@@ -1,5 +1,5 @@
 body {
-    background-color: #FAFAFA;
+    background-color: #FBFBFB;
 }
 
 div {
@@ -50,7 +50,7 @@ td {
 }
 
 td.definition {
-    background-color: hsl(0, 0%, 90%);
+    background-color: hsl(0, 0%, 92%);
     margin-bottom: 20px;
 }
 

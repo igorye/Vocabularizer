@@ -1,9 +1,9 @@
 package com.nicedev.vocabularizer.services.data;
 
-import java.util.ArrayList;
+import java.util.*;
 
 public class History<T> {
-	private ArrayList<T> list = new ArrayList<>();
+	private List<T> list = new LinkedList<>();
 	private int current = 0;
 	private int capacity;
 
@@ -34,6 +34,6 @@ public class History<T> {
 	}
 
 	public boolean isEmpty() {
-		return list.size() == 0;
+		return list.isEmpty();
 	}
 }

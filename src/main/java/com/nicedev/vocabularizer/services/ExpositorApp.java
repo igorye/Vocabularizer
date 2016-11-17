@@ -10,6 +10,10 @@ import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static java.util.Arrays.asList;
+import static java.util.Arrays.stream;
+import static java.util.stream.Collectors.toList;
+
 public class ExpositorApp {
 
 	static private String home = System.getProperties().getProperty("user.home");
@@ -73,7 +77,7 @@ public class ExpositorApp {
 			try {
 				String[] tokens = query.split("\\s{2,}|\t|\\[");
 				Predicate<String> isEmpty = String::isEmpty;
-				query = Arrays.asList(tokens).stream().filter(isEmpty.negate()).map(String::trim).findFirst().orElse("");
+				query = stream(tokens).filter(isEmpty.negate()).map(String::trim).findFirst().orElse("");
 				Vocabula vocabula;
 				Collection<Vocabula> vocabulas;
 				if ((vocabula = en.getVocabula(query)) == null) {
@@ -83,7 +87,7 @@ public class ExpositorApp {
 						System.out.printf("found:%n%s%n",
 								vocabulaCollectionToString(vocabulas.stream()
 										                           .map(voc -> voc.headWord)
-								                                   .collect(Collectors.toList())));
+								                                   .collect(toList())));
 					} else
 						System.out.printf("No definition for \"%s\"%nMaybe %s?%n", query, getSuggestions());
 				} else {
@@ -126,7 +130,7 @@ public class ExpositorApp {
 	}
 
 	private static Collection<Vocabula> getVocabula(String query) {
-		return Arrays.asList(expositors).parallelStream()
+		return asList(expositors).parallelStream()
 				       .map(expositor -> expositor.getVocabula(query, true))
 				       .collect(HashSet::new, Collection::addAll, Collection::addAll);
 	}

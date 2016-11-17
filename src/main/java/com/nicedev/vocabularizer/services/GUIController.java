@@ -1,6 +1,7 @@
 package com.nicedev.vocabularizer.services;
 
 import com.nicedev.vocabularizer.dictionary.Dictionary;
+import com.nicedev.vocabularizer.dictionary.PartOfSpeech;
 import com.nicedev.vocabularizer.dictionary.Vocabula;
 import com.nicedev.vocabularizer.services.data.History;
 import com.nicedev.vocabularizer.services.sound.PronouncingService;
@@ -22,11 +23,17 @@ import javafx.scene.web.WebView;
 import javafx.stage.PopupWindow;
 import javafx.stage.Window;
 
+import java.io.UnsupportedEncodingException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
+
+import static java.util.Arrays.asList;
+import static java.util.Arrays.stream;
+import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.toList;
 
 public class GUIController implements Initializable{
 
@@ -90,7 +97,7 @@ public class GUIController implements Initializable{
 		Node sourceNode = (Node) event.getSource();
 		if (eventType == KeyEvent.KEY_RELEASED) {
 			boolean hasHistory = !history.isEmpty();
-			switch (((KeyEvent)event).getCode()) {
+			switch (event.getCode()) {
 				case ENTER:
 					if (sourceNode instanceof TextField)
 						handleQuery(query);
@@ -138,6 +145,12 @@ public class GUIController implements Initializable{
 		}
 		if (getViewSelection().isEmpty())
 			queryText.requestFocus();
+	}
+
+	@FXML
+	protected void onSearch(ActionEvent event) {
+		Node source = getViewSelection().isEmpty() ? queryField : requestView;
+		Event.fireEvent(source, new KeyEvent(source, queryField, KeyEvent.KEY_RELEASED, "", "", KeyCode.ENTER, false, false, false, false));
 	}
 
 	private String getViewSelection() {
@@ -202,10 +215,13 @@ public class GUIController implements Initializable{
 	private void showTranslation(String selection, Function<String, String> requestFormatter) {
 		translateTab.setText(getTrimedString(selection, 30));
 		tabPane.getSelectionModel().select(translateTab);
-		String textToTranslate = selection.replaceAll("\\s", " ");
+		String textToTranslate = selection.replaceAll("[\\s] && [^\\n\\f\\r]]{2,}", " ");
 		translationTooltip.setText(textToTranslate);
 		translateTab.setTooltip(translationTooltip);
-		translateView.getEngine().load(requestFormatter.apply(textToTranslate));
+		try {
+			translateView.getEngine().load(requestFormatter.apply(URLEncoder.encode(textToTranslate, "UTF-8")));
+		} catch (UnsupportedEncodingException e) {
+		}
 		queryTabInactive = true;
 	}
 
@@ -249,8 +265,8 @@ public class GUIController implements Initializable{
 			history.add(fQuery[0]);
 			setSceneCursor(Cursor.WAIT);
 			int defCount = en.getDefinitionCount();
-			fQuery[0] = filterRequest(fQuery[0]);
-			if (fQuery[0].isEmpty()) return;
+			if (query.isEmpty()) return;
+			String cQuery = query;
 			try {
 				fQuery[0] = fQuery[0].split("\\s{2,}|\t")[0];
 				Vocabula vocabula;
@@ -283,7 +299,7 @@ public class GUIController implements Initializable{
 				if (defCount != en.getDefinitionCount())
 					Dictionary.save(en, storageEn);
 			}
-			lastQuery = fQuery[0];
+			lastQuery = cQuery;
 		});
 	}
 
@@ -302,7 +318,7 @@ public class GUIController implements Initializable{
 	}
 
 	private Collection<Vocabula> findVocabula(String query, boolean lookupSimilar) {
-		return Arrays.asList(expositors).parallelStream()
+		return asList(expositors).parallelStream()
 				       .map(expositor -> expositor.getVocabula(query, lookupSimilar))
 				       .collect(HashSet::new, Collection::addAll, Collection::addAll);
 	}
