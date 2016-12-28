@@ -1,8 +1,5 @@
 package com.nicedev.vocabularizer.dictionary;
 
-import javax.xml.bind.annotation.XmlElement;
-import javax.xml.bind.annotation.XmlElements;
-import javax.xml.bind.annotation.XmlRootElement;
 import java.io.Serializable;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -15,7 +12,7 @@ public class Definition implements Serializable, Comparable{
 	private static final long serialVersionUID = 2408653327252231176L;
 
 	public final Language language;
-	public final String explanatory;
+	public final String explanation;
 	protected Map.Entry<Vocabula, PartOfSpeech> defines;
 	private String identicalTo;
 	private Set<String> useCases;
@@ -23,8 +20,8 @@ public class Definition implements Serializable, Comparable{
 
 	private boolean hasAccordance;
 
-	public Definition(Language lang, Vocabula vocabula, PartOfSpeech partOfSpeech, String explanatory) {
-		this.explanatory = explanatory;
+	public Definition(Language lang, Vocabula vocabula, PartOfSpeech partOfSpeech, String explanation) {
+		this.explanation = explanation.trim();
 		this.language = lang;
 		synonyms = new TreeSet<>();
 		useCases = new LinkedHashSet<>();
@@ -81,7 +78,7 @@ public class Definition implements Serializable, Comparable{
 
 	@Override
 	public int compareTo(Object o) {
-		return explanatory.compareTo(((Definition) o).explanatory);
+		return explanation.compareTo(((Definition) o).explanation);
 	}
 
 	public boolean hasAccordance() {
@@ -95,27 +92,26 @@ public class Definition implements Serializable, Comparable{
 
 		Definition that = (Definition) o;
 
-		return explanatory.equalsIgnoreCase(that.explanatory);
+		return explanation.equalsIgnoreCase(that.explanation);
 	}
 
 	@Override
 	public int hashCode() {
-		return explanatory.hashCode();
+		return explanation.hashCode();
 	}
 
 	@Override
 	public String toString() {
 		StringBuilder res = new StringBuilder();
-		if (explanatory.length() != 0)
-			res.append(String.format("    - %s",explanatory.replaceAll("<b>", "<").replaceAll("</b>", ">")));
-		else if (indenticalTo != null)
-			res.append(String.format("    - see <%s>", indenticalTo.replaceAll("<b>", "<").replaceAll("</b>", ">")));
-		if (!synonyms.isEmpty()){
-			res.append(String.format("\n      synonym%s: ", synonyms.size() > 1 ? "s" : ""));
-			synonyms.forEach(uc -> res.append(uc).append(", "));
-			if (res.lastIndexOf(", ") == res.length()-2)
-				res.replace(res.lastIndexOf(", "), res.length(), "");
-		}
+		if (explanation.length() != 0)
+			res.append(String.format("    - %s", explanation.replaceAll("<b>", "<").replaceAll("</b>", ">")));
+		else if (identicalTo != null)
+			res.append(String.format("    - see <%s>", identicalTo.replaceAll("<b>", "<").replaceAll("</b>", ">")));
+		if (!synonyms.isEmpty()) res.append(String.format("\n      synonym%s: ", synonyms.size() > 1 ? "s" : ""))
+				                         .append(synonyms.stream()
+															.map(s -> s.contains("(") ? s : wrapInTag(s, s, "b", ""))
+															.collect(joining(", "))
+						                                 .replaceAll("<b>", "<").replaceAll("</b>",">")).append("\n");
 		if (!useCases.isEmpty()){
 			res.append("\n      : ");
 			useCases.forEach(uc -> res.append(String.format("%s", uc.replaceAll("<b>", "<").replaceAll("</b>", ">")))
@@ -127,10 +123,12 @@ public class Definition implements Serializable, Comparable{
 
 	public String toHTML() {
 		StringBuilder res = new StringBuilder();
-		if (explanatory.length() != 0)
+		if (explanation.length() != 0) {
+			String decoratedExpl = wrapInTag(explanation, "((?<=\\[:)([^\\[\\]:]+)(?=\\]))","span", "partofspeech");
 			res.append(String.format("<div class='definition'><table><tr><td>-</td>" +
-					                         "<td class='definition'>%s</td></tr></table>",explanatory));
-		else if (indenticalTo != null)
+					                         "<td class='definition'>%s</td></tr></table>", decoratedExpl));
+		}
+		else if (identicalTo != null)
 			res.append(String.format("<div class='definition'><table><tr><td>-</td>" +
 					                         "<td class='definition'>see:<b>%s</b></td></tr></table>", identicalTo));
 		if (!synonyms.isEmpty()){
@@ -167,5 +165,29 @@ public class Definition implements Serializable, Comparable{
 	public void addUseCases(Collection<String> useCases) {
 		useCases.forEach(uc -> this.useCases.add(uc.trim()));
 	}
-
+	
+	public Vocabula getDefinedVocabula() {
+		return defines.getKey();
+	}
+	
+	public PartOfSpeech getDefinedPartOfSpeech() {
+		return defines.getValue();
+	}
+	
+	/*public String toXML() {
+		StringBuilder res = new StringBuilder();
+		if (explanation.length() != 0)
+			res.append(String.format("<explanation>%s</explanation>%n", explanation));
+		if (!synonyms.isEmpty()){
+			res.append(String.format("<synonyms>%n"));
+			synonyms.forEach(syn -> res.append(String.format("<synonym'>%s</synonym>", syn)));
+			res.append(String.format("</synonyms>%n"));
+		}
+		if (!useCases.isEmpty()){
+			res.append(String.format("<usecases>%n"));
+			useCases.forEach(uc -> res.append(String.format("<usecase>%n</usecase>", uc)));
+			res.append(String.format("</usecases>%n"));
+		}
+		return res.toString();
+	}*/
 }

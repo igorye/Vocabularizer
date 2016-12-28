@@ -7,6 +7,7 @@ import java.io.FileReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.*;
 
 
 public class PronouncingApp {
@@ -38,19 +39,18 @@ public class PronouncingApp {
 			} catch (NoSuchElementException e) {
 				continue;
 			}
-			Collection<String> request = new ArrayList<>();
-			if(line.length() < 100)
-				request.add(line);
-			else 
-				request = split(line, "[\",:-][\\s]");
-			for(String tospell :request)
-			if(!tospell.isEmpty()) {
-				int delay = tospell.trim().contains(".") ? 200 : tospell.trim().contains("\"") ? 100 : 10;
-				speller.spell(tospell, delay);
+			if (spellingBuilder.length() > 200 && line.matches(".+[\\.\"\';:]") || line.matches("^\\s*$")) {
+				scheduler.schedule(spellingBuilder.toString());
+				spellingBuilder.setLength(0);
 			}
 		}
-		speller.release(0);
-		speller.join();
+		if (spellingBuilder.length() > 0 || !line.isEmpty()) {
+			scheduler.schedule(spellingBuilder.toString());
+		}
+		scheduler.release();
+		scheduler.join();
+		pronouncingService.release();
+		pronouncingService.join();
 	}
 
 	static class JobScheduler extends Thread {

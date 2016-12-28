@@ -23,13 +23,16 @@ abstract public class GoogleRequestProxy {
 	private List<String> possibleSuffixes;
 	private int next = 0;
 	private boolean interrupted;
-
+	private volatile boolean processSuffixes = false;
+	
 	protected GoogleRequestProxy(GTSRequest requestFmt) {
 		REQUEST_FMT = requestFmt;
-		executor = Executors.newFixedThreadPool(100);
+		executor = Executors.newFixedThreadPool(10);
+//        executor = Executors.newCachedThreadPool();
 		possibleSuffixes = Collections.synchronizedList(new ArrayList<>());
 		executor.execute(new SuffixEnumerator());
-		while (possibleSuffixes.isEmpty()) Thread.yield();
+		while (!processSuffixes) Thread.yield();
+//      while (possibleSuffixes.isEmpty()) Thread.yield();
 		suffixes = new LinkedBlockingDeque<>();
 		enumHosts();
 		next = new Random(System.currentTimeMillis()).nextInt(50);
@@ -133,6 +136,7 @@ abstract public class GoogleRequestProxy {
 					domainSuffix = "com." + domainSuffix;
 					if (isValidDomainSuffix() && connectionAvailable())
 						suffixes.add(domainSuffix);
+					
 				} catch (IOException e) {
 				}
 		}
@@ -149,6 +153,7 @@ abstract public class GoogleRequestProxy {
 					domainSuffix.append(a).append(b);
 					possibleSuffixes.add(domainSuffix.toString());
 				}
+			processSuffixes = true;
 		}
 	}
 	

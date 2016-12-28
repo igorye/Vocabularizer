@@ -75,6 +75,10 @@ public class WebTabPane extends TabPane {
 		tabSingleSelectionModel.select(Math.min(activeTabIndex, getTabs().size() - 1));
 	}
 	
+	public void removeTab(String title) {
+		getTabs().removeIf(ExpositorTab.sameTab(title));
+	}
+	
 	public void updateTabIndices() {
 		activeTabIndex = getSelectedTabIndex();
 	}

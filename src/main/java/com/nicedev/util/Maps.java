@@ -71,7 +71,7 @@ public class Maps {
 		return parallelizable ? new ConcurrentHashMap<>(m1) : clone(m1);
 	}
 	
-	//returns a Map with the same contents and same underlying implementation as the "map"
+	//returns a Map with the same contents and the same underlying implementation as the "map"
 	@SuppressWarnings("unchecked")
 	public static <K, T> Map<K, Collection<T>> clone(Map<K, Collection<T>> map) {
 		Class<?> clAss = map.getClass();

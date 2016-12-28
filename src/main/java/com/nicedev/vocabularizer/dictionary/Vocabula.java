@@ -153,9 +153,18 @@ public class Vocabula implements Serializable, Comparable {
 		defs.addAll(definitions);
 		mapPOS.putIfAbsent(partOfSpeech, defs);
 	}
-
-	public void removePartOfSpeech(String partOfSpeechName) {
-		mapPOS.remove(language.getPartOfSpeech(partOfSpeechName));
+	
+	public void addPartsOfSpeechIf(Set<Definition> definitions) {
+		
+	}
+	
+	public void addDefinitions(Vocabula vocabula) {
+		if (!headWord.equals(vocabula.headWord)) return;
+		vocabula.mapPOS.keySet().forEach(pos -> mapPOS.putIfAbsent(pos, vocabula.mapPOS.get(pos)));
+	}
+	
+	public boolean removePartOfSpeech(String partOfSpeechName) {
+		return mapPOS.remove(language.getPartOfSpeech(partOfSpeechName)) != null;
 	}
 	
 	public Set<Definition> getDefinitions() {
@@ -259,10 +268,47 @@ public class Vocabula implements Serializable, Comparable {
 		return res.toString();
 	}
 
-	private Set<String> getPartsOfSpeech(PartOfSpeech partOfSpeech) {
-		return knownForms.getOrDefault(partOfSpeech, Collections.<String>emptySet());
+    /*public String toXML() {
+        StringBuilder res = new StringBuilder();
+        res.append(String.format("<article>"));
+        String headWordFmt = "%n<headword>%s</headword>%n<transcription>%s</transcription>%n";
+        res.append(String.format(headWordFmt, headWord, getTranscription()));
+        res.append(String.format("<partsofspeech>%n"));
+        mapPOS.keySet().forEach(partOfSpeech -> {
+            res.append(String.format("<partofspeech>%s</partofspeech>%n", partOfSpeech));
+            Set<String> forms = getKnownForms(partOfSpeech);
+            if (!forms.isEmpty()){
+                res.append(String.format("<forms>%n"));
+                forms.forEach(f -> res.append(String.format("<form>%s</form>%n", f)));
+                res.append(String.format("</forms>%n"));
+            }
+            res.append(String.format("<definitions>%n"));
+            getDefinitions(partOfSpeech).forEach(definition -> res.append(definition.toXML()));
+            res.append(String.format("</definitions>%n"));
+            res.append("</article>");
+        });
+        return res.toString();
+    }*/
+	
+	public Set<String> getKnownForms(PartOfSpeech partOfSpeech) {
+		return partOfSpeech.partName.equals(PartOfSpeech.ANY)
+				       ? knownForms.values().stream().flatMap(Collection::stream).collect(toSet())
+				       : knownForms.getOrDefault(partOfSpeech, Collections.emptySet());
 	}
-
+	
+	public Set<String> getKnownForms(String partOfSpeechName) {
+		return getKnownForms(new PartOfSpeech(language, partOfSpeechName));
+	}
+	
+	public Set<String> getKnownForms() {
+		return getKnownForms(new PartOfSpeech(language, PartOfSpeech.ANY));
+	}
+	
+	
+//	public Map<PartOfSpeech, Set<Definition>> getPartOfSpeech(PartOfSpeech partOfSpeech) {
+//		return ((SortedMap) mapPOS).subMap(partOfSpeech, partOfSpeech);
+//	}
+	
 	public void addSynonym(String definition, String synonym) {
 		
 	}

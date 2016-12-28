@@ -637,17 +637,26 @@ public class GUIController implements Initializable {
 	}
 	
 	private Map<String, Collection<String>> getIndex(int indexingAlgo) {
+		return getIndex(dictionary.filterVocabulas(""), indexingAlgo);
+	}
+	
+	private Map<String, Collection<String>> getIndex(Collection<Vocabula> vocabulas, int indexingAlgo) {
 		//log("chosen algo %d", indexingAlgo);
 		//long start = System.currentTimeMillis();
 		Map<String, Collection<String>> res;
 		switch (indexingAlgo) {
-			case 1 : res = getIndex1(); break;
-			case 2 : res = getIndex2(); break;
-			default: res = getIndex();
+			case 1 : res = getIndex1(vocabulas); break;
+			case 2 : res = getIndex2(vocabulas); break;
+			default: res = getIndex(vocabulas);
 		}
 		//log("built index in %f (allowParallelStream==%s, indexingAlgo==%d",
-			//	(System.currentTimeMillis() - start) / 1000f, ALLOW_PARALLEL_STREAM, indexingAlgo);
+		//	(System.currentTimeMillis() - start) / 1000f, ALLOW_PARALLEL_STREAM, indexingAlgo);
 		return  res;
+	}
+	
+	private void alterSearchIndex(Collection<Vocabula> vocabulas) {
+		Map<String, Collection<String>> addToIndex = getIndex(vocabulas, INDEXING_ALGO);
+		Maps.mergeLeft(fullSearchIndex, addToIndex, ALLOW_PARALLEL_STREAM);
 	}
 	
 	private void resetCache() {
@@ -702,6 +711,7 @@ public class GUIController implements Initializable {
 	}
 	
 	public class JSBridge {
+		
 		public void jsHandleQuery(String headWord) {
 			log("jsBridge: jsHandleQuery: requested %s", headWord);
 			handleQuery(headWord);
@@ -722,17 +732,12 @@ public class GUIController implements Initializable {
 		});
 		if (tab instanceof ExpositorTab) {
 			WebEngine engine = view.getEngine();
+			JSBridge jsBridge = new JSBridge();
 			engine.getLoadWorker().stateProperty().addListener((observable, oldValue, newValue) -> {
 				if (newValue == Worker.State.SUCCEEDED) {
 					engine.setJavaScriptEnabled(true);
 					JSObject window = (JSObject) engine.executeScript("window");
-					window.setMember("jsBridge", new JSBridge());
-//					log("handlerSetter: bridge injected, testing jsBridge.jsTest()");
-//					engine.executeScript("testBridge()");
-//					log("handlerSetter: bridge injected, JS call");
-//					engine.executeScript("explainHeadWord(document.getElementsByTagName('a')[0])");
-//					log("handlerSetter: bridge injected, jsBridge call");
-//					engine.executeScript("jsBridge.jsHandleQuery(document.getElementsByTagName('a')[0])");
+					window.setMember("jsBridge", jsBridge);
 				}
 			});
 		}
@@ -914,9 +919,7 @@ public class GUIController implements Initializable {
 						int nAdded = dictionary.addVocabulas(vocabulas);
 						hwData.setAll(vocabulas.stream().map(v -> v.headWord).distinct().collect(toList()));
 						//ad hoc appending each vocabula to searchIndex while one being rebuilding
-						vocabulas.stream()
-								.map(v -> v.headWord)
-								.forEach(hw -> fullSearchIndex.merge(hw, new HashSet<>(), (c1, c2) -> {c2.add(hw); return c2;}));
+						alterSearchIndex(vocabulas);
 						if (nAdded == 1 && hwData.contains(cQuery)) {
 							Optional<Vocabula> optVoc = vocabulas.stream()
 									                            .filter(vocabula -> vocabula.headWord.equals(cQuery))
@@ -924,7 +927,10 @@ public class GUIController implements Initializable {
 							showQueryResult(optVoc);
 						} else {
 							hwData.setAll(vocabulas.stream().map(v -> v.headWord).distinct().collect(toList()));
-							Platform.runLater(() -> tabPane.selectTab(mainTab));
+							Platform.runLater(() -> {
+								tabPane.removeTab(cQuery);
+								tabPane.selectTab(mainTab);
+							});
 							updateTableState(false);
 						}
 //						log("HQ: updateQueryField(%s,%s)", cQuery, false);
@@ -944,7 +950,7 @@ public class GUIController implements Initializable {
 						updateTableState();
 					}
 				}
-				if (defCount != dictionary.getDefinitionCount()) updateStatistics();
+				if (defCount != dictionary.getDefinitionCount()) updateStatistics(false);
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
@@ -1014,6 +1020,9 @@ public class GUIController implements Initializable {
 		GUIUtil.hackAlert(confirm);
 		confirm.showAndWait().filter(response -> response == ButtonType.YES).ifPresent(response -> {
 			indexer.cancel(true);
+			if (tabPane.getSelectedTabIndex() > 0 && headwords.contains(tabPane.getActiveTab().getText()))
+				tabPane.removeActiveTab();
+			executor.execute(() -> {
 			long deleted = headwords.stream()
 					               .map(String::trim)
 					               .filter(headword -> dictionary.removeVocabula(headword))
@@ -1021,9 +1030,7 @@ public class GUIController implements Initializable {
 			if (deleted > 0) {
 				saveDictionary();
 				updateStatistics();
-				if (tabPane.getSelectedTabIndex() > 0 && headwords.contains(tabPane.getActiveTab().getText())) {
-					tabPane.removeActiveTab();
-				} else if (tabPane.getTabs().size() == 1) {
+				if (tabPane.getTabs().size() == 1) {
 					log("DH: updateQueryField(%s,%s)", queryBoxValue.getValue(), true);
 					updateQueryField(queryBoxValue.getValue(), true);
 					hwData.setAll(filterList(queryBoxValue.getValue()));
@@ -1031,6 +1038,7 @@ public class GUIController implements Initializable {
 				hwData.removeAll(headwords);
 				updateTableState(false);
 			}
+			});
 		});
 	}
 	
@@ -1042,9 +1050,9 @@ public class GUIController implements Initializable {
 		updateStatistics(true);
 	}
 	
-	private void updateStatistics(boolean changed) {
+	private void updateStatistics(boolean invalidateIndex) {
 		Platform.runLater(() -> stats.setText(dictionary.toString()));
-		if (changed) rebuildIndex();
+		if (invalidateIndex) rebuildIndex();
 	}
 	
 	private String removeGaps(String queryText) {
@@ -1167,15 +1175,6 @@ public class GUIController implements Initializable {
 						         .collect(toList());
 	};
 	
-	private Map<String, Collection<String>> getMockIndex() {
-		try {
-			Thread.sleep(20000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		return emptyMap();
-	}
-	
 	private Predicate<String> allMatch = s -> true;
 	
 	private Predicate<String> bTagWrapped = s -> s.contains("<b>");
@@ -1211,7 +1210,8 @@ public class GUIController implements Initializable {
 		Matcher matcher = Pattern.compile("<b>((?<=<b>)[^<>]+(?=</b>))</b>").matcher(source);
 		while (matcher.find()) HWs.add(matcher.group(1).trim());
 		Set<String> separateHWs = HWs.stream()
-				                          .flatMap(s -> stream(s.split("[,.:;/()\\s\\\\]"))
+										  .filter(s -> !s.matches("\\p{Punct}}"))
+				                          .flatMap(s -> stream(s.split("[,.:;'/()\\s\\\\]"))
 						                                        .filter(Strings.notBlank)
 						                                        .distinct())
 				                          .collect(toSet());
@@ -1224,7 +1224,7 @@ public class GUIController implements Initializable {
 	}
 	
 	private Map<String, Collection<String>> indexFor(Collection<Definition> definitions,
-	                                                Collection<Function<Definition, Stream<String>>> hwSuppliers) {
+	                                                 Collection<Function<Definition, Stream<String>>> hwSuppliers) {
 		if (definitions.isEmpty() || isIndexingAborted()) return emptyMap();
 		BiConsumer<Map<String, Collection<String>>, Map<String, Collection<String>>> combiner = (m1, m2) -> {
 			Maps.mergeLeft(m1, m2, ALLOW_PARALLEL_STREAM);
@@ -1249,12 +1249,12 @@ public class GUIController implements Initializable {
 						       combiner);
 	}
 	
-	private Map<String, Collection<String>> getIndex() {
+	private Map<String, Collection<String>> getIndex(Collection<Vocabula> vocabulas) {
 		BiConsumer<Map<String, Collection<String>>, Map<String, Collection<String>>> accumulator = (m1, m2) -> {
 			if (!isIndexingAborted())  Maps.mergeLeft(m1, m2, ALLOW_PARALLEL_STREAM);
 		};
 		if (isIndexingAborted()) return emptyMap();
-		return getStream(dictionary.filterVocabulas(""), ALLOW_PARALLEL_STREAM)
+		return getStream(vocabulas, ALLOW_PARALLEL_STREAM)
 				       .map(this::indexFor)
 				       .collect(HashMap::new, accumulator, accumulator);
 	}
@@ -1263,7 +1263,7 @@ public class GUIController implements Initializable {
 		return Optional.ofNullable(m.get(k)).map(Collection::size).orElse(0);
 	}
 	
-	protected Map<String, Collection<String>> getIndex1() {
+	protected Map<String, Collection<String>> getIndex1(Collection<Vocabula> vocabulas) {
 		BiConsumer<Map<String, Collection<String>>, Map<String, Collection<String>>> accumulator = (m1, m2) -> {
 			if (!isIndexingAborted()) Maps.merge(m1, m2, k -> {
 				int size = max(getValueSize(m1, k), getValueSize(m2, k));
@@ -1271,14 +1271,14 @@ public class GUIController implements Initializable {
 			});
 		};
 		if (isIndexingAborted()) return emptyMap();
-		return getStream(dictionary.filterVocabulas(""), ALLOW_PARALLEL_STREAM)
+		return getStream(vocabulas, ALLOW_PARALLEL_STREAM)
 				       .map(this::indexFor)
 				       .collect(HashMap::new, accumulator, accumulator);
 	}
 	
-	private Map<String, Collection<String>> getIndex2() {
+	private Map<String, Collection<String>> getIndex2(Collection<Vocabula> vocabulas) {
 		if (isIndexingAborted()) return emptyMap();
-		return getStream(dictionary.filterVocabulas(""), ALLOW_PARALLEL_STREAM)
+		return getStream(vocabulas, ALLOW_PARALLEL_STREAM)
 				       .map(this::indexFor)
 				       .reduce(this::accumulate)
 				       .orElse(emptyMap());

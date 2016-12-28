@@ -32,64 +32,23 @@ public class    PronouncingService extends Thread {
 	volatile private int saveLimit = 0;
 	private boolean owerloadAccent = false;
 	private int accent = 0;
-	private final boolean showProgress;
 	private Map<String, PronunciationSaver> savers;
 	private boolean hasInput = true;
 	private StopableSoundPlayer activePlayer = new AudioController();
+	private volatile boolean stoppedPlaying = false;
 
 
-	private class CachingAgent extends Thread {
-
-		CachingAgent() {
-			setName("Cacheer");
-			start();
-		}
-
-		public void run() {
-			PronunciationData pronunciationData = new PronunciationData(null, null, 0, 0);
-			while (!interrupted)
-				try {
-					pronunciationData = pronouncingQueue.take();
-//					System.err.println("cacheer took data");
-					if(owerloadAccent) pronunciationData = new PronunciationData(pronunciationData.pronunciationSource,
-							                                                            accents[accent % accents.length],
-							                                                            pronunciationData.delayAfter,
-							                                                            pronunciationData.limitPercent);
-					cache.put(pronunciationData, cacheFromInputStream(requestProxy.requestPronunciationStream(pronunciationData),
-							pronunciationData.limitPercent));
-					cacheQueue.put(pronunciationData);
-//					System.err.printf("(%d, %d)%n", cacheQueue.size(), cache.size());
-				} catch (InterruptedException e) {
-//					System.err.println("cacheer interrupted");
-					break;
-				} catch (IOException e) {
-					System.err.println("failed to cache " + pronunciationData.pronunciationSource);
-				}
-		}
-
-		private byte[] cacheFromInputStream(InputStream inputStream, float percents) throws IOException {
-			byte[] cache = new byte[4096];
-			if(inputStream == null) return cache;
-			ByteArrayOutputStream baoStream = new ByteArrayOutputStream();
-			int read;
-			while ((read = inputStream.read(cache)) != -1) {
-				baoStream.write(cache, 0, read);
-			}
-			cache = baoStream.toByteArray();
-			return Arrays.copyOf(cache, (int) Math.floor(cache.length * percents / 100.f));
-		}
+	public PronouncingService(boolean showDebug) {
+		this(10, showDebug);
 	}
 
-	public PronouncingService(boolean showProgress) {
-		this(10, showProgress);
-	}
-
-	public PronouncingService(int cacheSize, boolean showProgress) {
+	public PronouncingService(int cacheSize, boolean showDebug) {
 		savers = new HashMap<>();
-		this.showProgress = showProgress;
+		this.showDebug = showDebug;
 		requestProxy = TTSRequestProxy.getInstance();
 		cache = Collections.synchronizedMap(new LinkedHashMap<>());
-		pronouncingQueue = new ArrayBlockingQueue<>(cacheSize);
+		pronouncingQueue = new ArrayBlockingQueue<>(100);
+//		pronouncingQueue = new LinkedBlockingDeque<>();
 		saveQueue = new ArrayBlockingQueue<>(1);
 		cacheQueue = new ArrayBlockingQueue<>(cacheSize);
 		cAgent = new CachingAgent();
@@ -131,8 +90,10 @@ public class    PronouncingService extends Thread {
 			Clip clip = AudioSystem.getClip();
 			activePlayer = new AudioController(clip);
 			clip.open(audioInputStream);
-			clip.start();
-		} catch (IOException | UnsupportedAudioFileException | LineUnavailableException e) {
+			if(!stoppedPlaying)
+				clip.start();
+			clip.addLineListener(clipStopHandler(clip));
+		} catch (IOException | UnsupportedAudioFileException | LineUnavailableException | NullPointerException e) {
 //			System.err.println("URLspeller interrupted");
 		}
 	}
@@ -151,13 +112,15 @@ public class    PronouncingService extends Thread {
 			interrupted = pronunciationLimit-- <= 0;
 		try (InputStream pronunciationStream = new ByteArrayInputStream(cache.get(pronunciationData))){
 			Player playerMP3 = new Player(pronunciationStream);
-			if (showProgress) System.err.println(pronunciationData);
+			if (showDebug) System.err.println(pronunciationData);
 			activePlayer = new AudioController(playerMP3);
-			playerMP3.play();
+			if(!stoppedPlaying)
+				playerMP3.play();
 			Thread.sleep(pronunciationData.delayAfter);
 			cache.remove(pronunciationData);
-		} catch (JavaLayerException | IOException | InterruptedException e) {
-//			System.err.println("GTTS interrupted");
+		} catch (JavaLayerException | IOException | InterruptedException | NullPointerException e) {
+//			System.err.printf("GTTS interrupted");
+			System.err.printf("data recieved %s%n", pronunciationData.pronunciationSource);
 		}
 	}
 
@@ -166,12 +129,14 @@ public class    PronouncingService extends Thread {
 	}
 
 	public void pronounce(String wordsToPronounce, int delay) {
+		stoppedPlaying = false;
 		try {
 			String accent = wordsToPronounce.contains("://") ? null : accents[this.accent % accents.length];
 			for(String words: split(wordsToPronounce, "\n", 0))
 				pronouncingQueue.put(new PronunciationData(words, accent, delay, 98));
 		} catch (InterruptedException e) {
 			interrupted = true;
+			stoppedPlaying = true;
 //			System.err.println("pronounce interrupted");
 		}
 	}
@@ -209,9 +174,10 @@ public class    PronouncingService extends Thread {
 	}
 
 	public void clear() {
-		activePlayer.stop();
-		cacheQueue.clear();
+		stoppedPlaying = true;
 		pronouncingQueue.clear();
+		cacheQueue.clear();
+		activePlayer.stop();
 		cache.clear();
 	}
 
@@ -219,10 +185,11 @@ public class    PronouncingService extends Thread {
 		while (!interrupted && (!cacheQueue.isEmpty() || !pronouncingQueue.isEmpty() || hasInput)) {
 			try {
 				PronunciationData toPronounce = cacheQueue.take();
-				if (toPronounce.pronunciationSource.contains("://"))
-					pronounceURL(toPronounce);
-				else
-					pronounceGTTS(toPronounce);
+				if (!stoppedPlaying)
+					if (toPronounce.pronunciationSource.contains("://"))
+						pronounceURL(toPronounce);
+					else
+						pronounceGTTS(toPronounce);
 			} catch (InterruptedException e) {
 				if(cAgent.isAlive()) cAgent.interrupt();
 				requestProxy.release();
