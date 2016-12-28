@@ -1,4 +1,4 @@
-package com.nicedev.vocabularizer.services.data;
+package com.nicedev.vocabularizer.services.sound;
 
 public class PronunciationData {
 	public final String pronunciationSource;

@@ -26,9 +26,9 @@ public class GoogleTranslateTokenGenerator{
 	{
 		for (int c = 0; c < b.length() - 2; c += 3) {
 			int d = b.charAt(c + 2);
-			d = d >= (char)'a' ? (int)(d - 87) : Integer.parseInt(Character.toString ((char) d));
-			d = ((char) '+') == b.charAt(c + 1) ? (int)(a >>> d) : (int)(a << d);
-			a = ((char) '+') == b.charAt(c) ? (int)(a + d & 4294967295L) : (int)(a ^ d);
+			d = d >= 'a' ? d - 87 : Integer.parseInt(Character.toString((char) d));
+			d = '+' == b.charAt(c + 1) ? a >>> d : a << d;
+			a = '+' == b.charAt(c) ? (int) (a + d & 4294967295L) : a ^ d;
 		}
 		return a;
 	}
@@ -52,7 +52,7 @@ public class GoogleTranslateTokenGenerator{
 		for(int g = 0; g < text.length(); g++ ) {
 			int l = text.charAt(g);
 			if (128 > l) {
-				e[f++] = (int)l;
+				e[f++] = l;
 			} else {
 				if(2048 > l) {
 					e[f++] = e[f++] = l >> 6 | 192 ;

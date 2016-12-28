@@ -3,17 +3,16 @@ package com.nicedev.vocabularizer.dictionary;
 import java.io.Serializable;
 
 public class PartOfSpeech implements Serializable, Comparable {
+	
+	final public static String UNDEFINED = "UNDEFINED";
+	final public static String ANY = "ANY";
+	final public static String COMPOSITE = "COMPOSITE";
+	private static final long serialVersionUID = 2010332645168347315L;
 	final public Language lang;
 	final public String partName;
 	final public String shortName;
 	public PartOfSpeech correspondsTo;
 	public boolean identiacalCorrespondance;
-
-	final public static String UNDEFINED = "UNDEFINED";
-	final public static String ANY = "ANY";
-	final public static String COMPOSITE = "COMPOSITE";
-
-
 
 	public PartOfSpeech(Language language) {
 		this(language, UNDEFINED, "");
@@ -21,8 +20,8 @@ public class PartOfSpeech implements Serializable, Comparable {
 
 	public PartOfSpeech(Language language, String partName, String shortName) {
 		this.lang = language;
-		this.partName = partName;
-		this.shortName = shortName;
+		this.partName = partName.trim();
+		this.shortName = shortName.trim();
 		this.correspondsTo = null;
 	}
 
@@ -49,7 +48,8 @@ public class PartOfSpeech implements Serializable, Comparable {
 			this.correspondsTo = corrPoS;
 		return correspondsTo != null;
 	}
-
+	
+	@Override
 	public String toString() {
 		return partName;
 	}

@@ -9,7 +9,7 @@ div {
 }
 
 .headword {
-    font-size: larger;
+    font-size: 130%;
     font-weight: bold;
     margin-right: 15px;
     padding: 10px;
@@ -19,22 +19,22 @@ div {
 .partofspeech {
     font-style: italic;
     font-family: initial;
+    font-size: 95%;
 }
 
 .list {
     font-family: Tahoma;
     font-style: normal;
     color: #2F2F2F;
-    font-size: 14px;
     line-height: 140%;
     padding-left: 20px;
 }
 
 .transcription {
-    font-size: 90%;
+    font-size: 95%;
     font-family: 'Lucinda Console', Tahoma;
     vertical-align: middle;
-    letter-spacing: 0.075em;
+    letter-spacing: 0.07em;
 }
 
 .definition {
@@ -42,6 +42,7 @@ div {
     font-family: initial;
     padding-bottom: 5px;
     padding-top: 1px;
+    font-size: 105%;
 }
 
 td {

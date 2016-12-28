@@ -1,6 +1,7 @@
 package com.nicedev.vocabularizer.services.proxy;
 
-import com.nicedev.vocabularizer.services.data.PronunciationData;
+import com.nicedev.util.SimpleLog;
+import com.nicedev.vocabularizer.services.sound.PronunciationData;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.io.BufferedInputStream;
@@ -39,14 +40,16 @@ public class TTSRequestProxy extends GoogleRequestProxy {
 			ttsRequest = conn instanceof HttpsURLConnection;
 			if (ttsRequest)
 				prepareConnProps(conn);
-
 			int streamSize = conn.getContentLength();
 			return new BufferedInputStream(conn.getInputStream(), streamSize);
+		} catch (NullPointerException eConn) {
+			return null;
 		} catch (IOException e) {
 			try {
 				if(conn.getResponseCode() == 404) return null;
 			} catch (IOException e1) {
-				e1.printStackTrace();
+				SimpleLog.log(e1.getMessage());
+				return null;
 			}
 			if (ttsRequest) rejectRecentHost(e);
 			return requestPronunciationStream(pronunciationData);

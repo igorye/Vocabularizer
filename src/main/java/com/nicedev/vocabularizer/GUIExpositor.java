@@ -1,4 +1,4 @@
-package com.nicedev.vocabularizer.services;
+package com.nicedev.vocabularizer;
 
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
@@ -12,11 +12,15 @@ import java.net.URL;
 public class GUIExpositor extends Application {
 
     private GUIController controller;
+	
+	public static void main(String[] args) {
+		launch(args);
+	}
 
     @Override
     public void start(Stage primaryStage) throws IOException {
-        URL resource = getClass().getProtectionDomain().getClassLoader().getResource("htmlView.fxml");
-        FXMLLoader fxmlLoader = new FXMLLoader(resource);
+	    URL resource = getClass().getProtectionDomain().getClassLoader().getResource("tableView.fxml");
+	    FXMLLoader fxmlLoader = new FXMLLoader(resource);
         Parent root = fxmlLoader.load();
         Scene scene = new Scene(root);
         controller = fxmlLoader.getController();
@@ -25,10 +29,6 @@ public class GUIExpositor extends Application {
         primaryStage.setScene(scene);
         primaryStage.setOnShown(event -> controller.onLoad());
         primaryStage.show();
-    }
-
-    public static void main(String[] args) {
-        launch(args);
     }
 
     @Override

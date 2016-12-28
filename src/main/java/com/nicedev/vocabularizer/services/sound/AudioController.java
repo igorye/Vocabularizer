@@ -7,17 +7,20 @@ import javax.sound.sampled.Clip;
 public class AudioController implements StopableSoundPlayer {
 	private Object player;
 
-	public AudioController(Object player) {
+	AudioController(Object player) {
 		this.player = player;
 	}
 
-	public AudioController() {
+	AudioController() {
 		this(null);
 	}
 
 	@Override
 	public void stop() {
-		if(player instanceof Clip) ((Clip) player).stop();
+		if (player instanceof Clip) {
+			Clip clip = (Clip) player;
+			if (clip.isActive()) clip.stop();
+		}
 		if(player instanceof Player) ((Player) player).close();
 	}
 }
