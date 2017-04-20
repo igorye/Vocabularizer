@@ -4,10 +4,10 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.function.*;
 import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collector.Characteristics.*;
 import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.toSet;
 
 public class Vocabula implements Serializable, Comparable {
 	
@@ -292,7 +292,7 @@ public class Vocabula implements Serializable, Comparable {
 	
 	public Set<String> getKnownForms(PartOfSpeech partOfSpeech) {
 		return partOfSpeech.partName.equals(PartOfSpeech.ANY)
-				       ? knownForms.values().stream().flatMap(Collection::stream).collect(toSet())
+				       ? knownForms.values().stream().flatMap(Collection::stream).collect(Collectors.toSet())
 				       : knownForms.getOrDefault(partOfSpeech, Collections.emptySet());
 	}
 	

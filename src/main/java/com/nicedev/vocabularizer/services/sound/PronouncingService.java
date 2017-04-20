@@ -16,7 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 
-public class    PronouncingService extends Thread {
+public class PronouncingService extends Thread {
 	final static private String[] accents = {"GB", "US"};
 	static volatile private boolean interrupted = false;
 	private final TTSRequestProxy requestProxy;

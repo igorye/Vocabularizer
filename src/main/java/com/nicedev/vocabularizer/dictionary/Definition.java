@@ -107,11 +107,16 @@ public class Definition implements Serializable, Comparable{
 			res.append(String.format("    - %s", explanation.replaceAll("<b>", "<").replaceAll("</b>", ">")));
 		else if (identicalTo != null)
 			res.append(String.format("    - see <%s>", identicalTo.replaceAll("<b>", "<").replaceAll("</b>", ">")));
-		if (!synonyms.isEmpty()) res.append(String.format("\n      synonym%s: ", synonyms.size() > 1 ? "s" : ""))
-				                         .append(synonyms.stream()
-															.map(s -> s.contains("(") ? s : wrapInTag(s, s, "b", ""))
-															.collect(joining(", "))
-						                                 .replaceAll("<b>", "<").replaceAll("</b>",">")).append("\n");
+		if (!synonyms.isEmpty())
+			res.append(String.format("\n      synonym%s: ", synonyms.size() > 1 ? "s" : ""))
+					.append(synonyms.stream()
+							        .map(s -> {
+								        String match = s.contains("(") ? "^([^\\(]+)(( \\([^\\(\\)]+\\))+)$" : s;
+								        return wrapInTag(s, match, "b", "");
+							        })
+							        .collect(joining(", "))
+							        .replaceAll("<b>", "<").replaceAll("</b>",">"))
+					.append("\n");
 		if (!useCases.isEmpty()){
 			res.append("\n      : ");
 			useCases.forEach(uc -> res.append(String.format("%s", uc.replaceAll("<b>", "<").replaceAll("</b>", ">")))
@@ -134,8 +139,12 @@ public class Definition implements Serializable, Comparable{
 		if (!synonyms.isEmpty()){
 			res.append(String.format("\n<div class='synonym'>synonym%s: ", synonyms.size() > 1 ? "s" : ""))
 					.append(synonyms.stream()
-										.map(s -> s.contains("(") ? s : wrapInTag(s, s, "b", ""))
-										.collect(joining(", "))).append("</div>\n");
+										.map(s -> {
+											String match = s.contains("(") ? "^([^\\(]+)(( \\([^\\(\\)]+\\))+)$" : s;
+											return wrapInTag(s, match, "b", "");
+										})
+										.collect(joining(", ")))
+					.append("</div>\n");
 //					.append("<b>").append(synonyms.stream().collect(joining("</b>, <b>"))).append("</b></div>\n");
 		}
 		if (!useCases.isEmpty()){
@@ -151,7 +160,7 @@ public class Definition implements Serializable, Comparable{
 		String result = source;
 		String wrapFmt = className.isEmpty() ? "<%1$s>%3$s</%1$s>" : "<%1$s class='%2$s'>%3$s</%1$s>";
 		while (matcher.find()) {
-			String wrapped = matcher.group(0);
+			String wrapped = matcher.group(matcher.groupCount() > 1 ? 1 : 0);
 			result = source.replace(wrapped, String.format(wrapFmt, tag, className, wrapped));
 		}
 		return result;

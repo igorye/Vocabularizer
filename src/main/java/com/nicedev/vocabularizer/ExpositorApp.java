@@ -11,15 +11,16 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 import static com.nicedev.util.SimpleLog.log;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
-import static java.util.Arrays.asList;
 import static java.util.Arrays.stream;
 import static java.util.stream.Collectors.*;
 
 public class ExpositorApp {
-	
+
+	private static final boolean ACCEPT_SIMILAR = Boolean.getBoolean(System.getProperties().getProperty("acceptPolicy", "false"));
 	static private String home = System.getProperties().getProperty("user.home");
 	private static String storageEn = String.format("%s\\%s.dict", home, "english");
 	static private PronouncingService pronouncingService;
@@ -68,22 +69,24 @@ public class ExpositorApp {
 				continue;
 			} else if (query.startsWith(":")) {
 				query = query.substring(1, query.length()).trim();
-				System.out.println(vocabulaCollectionToString(dictionary.filterHeadwords(query, "i"), query));
+				System.out.println(collectionToString(dictionary.filterHeadwords(query, "i"), query));
 				continue;
 			}
 			try {
 				String[] tokens = query.split("\\s{2,}|\t|\\[");
 				Predicate<String> notEmpty = s -> !s.trim().isEmpty();
 				query = stream(tokens).filter(notEmpty).map(String::trim).findFirst().orElse("");
+				boolean acceptSimilar = query.startsWith("~") || ACCEPT_SIMILAR;
+				if (acceptSimilar) query = query.substring(1, query.length());
 				Optional<Vocabula> vocabula = dictionary.getVocabula(query);
 				if (!vocabula.isPresent()) {
-					Collection<Vocabula> vocabulas = findVocabula(query);
+					Collection<Vocabula> vocabulas = findVocabula(query, acceptSimilar);
 					if (!vocabulas.isEmpty()) {
 						int nAdded = dictionary.addVocabulas(vocabulas);
-						System.out.printf("found:%n%s%n", vocabulaCollectionToString(vocabulas.stream()
-								                                                             .map(voc -> voc.headWord)
-								                                                             .distinct()
-								                                                             .collect(toList()), query));
+						System.out.printf("found:%n%s%n", collectionToString(vocabulas.stream()
+								                                                     .map(voc -> voc.headWord)
+								                                                     .distinct()
+								                                                     .collect(toList()), query));
 					} else
 						System.out.printf("No definition for \"%s\"%nMaybe %s?%n", query, getSuggestions());
 				} else {
@@ -95,7 +98,6 @@ public class ExpositorApp {
 					System.out.println(dictionary);
 				if (++updateCount % 5 == 0)
 					Dictionary.save(dictionary, storageEn);
-				
 			} catch (Exception e) {
 				e.printStackTrace();
 			} finally {
@@ -122,7 +124,7 @@ public class ExpositorApp {
 		}
 	}
 	
-	private static String vocabulaCollectionToString(Collection<String> strings, String sortBy) {
+	private static String collectionToString(Collection<String> strings, String sortBy) {
 		StringBuilder res = new StringBuilder();
 		if (!strings.isEmpty()) {
 			String listed = strings.parallelStream().sorted()
@@ -138,25 +140,25 @@ public class ExpositorApp {
 		return res.toString();
 		
 	}
-	
+
 	private static Collection<String> getSuggestions() {
-		return asList(expositors).parallelStream()
-					   .sorted(Comparator.comparingInt(expositor -> expositor.priority))
+		return Stream.of(expositors).parallel()
+				       .sorted(Comparator.comparingInt(expositor -> expositor.priority))
 				       .flatMap(expositor -> expositor.getRecentSuggestions().stream())
 				       .collect(toSet());
 	}
 	
 	@SuppressWarnings("unchecked")
-	private static Collection<Vocabula> findVocabula(String query) {
+	private static Collection<Vocabula> findVocabula(String query, boolean acceptSimilar) {
 //		return stream(expositors)
 //				       .sorted(Comparator.comparingInt(expositor -> expositor.priority))
 //				       .flatMap(expositor -> expositor.getVocabula(query, true).stream())
 //				       .collect(toSet());
-		return asList(expositors).parallelStream()
+		return Stream.of(expositors).parallel()
 //				       .sorted(Comparator.comparingInt(expositor -> expositor.priority))
 //				       .flatMap(expositor -> expositor.getVocabula(query, true).stream())
-				       .map(expositor -> new Object[] { new Integer(expositor.priority), expositor.getVocabula(query, true)})
-				       .sorted(Comparator.comparingInt(tuple -> (Integer) tuple[0]))
+				       .map(expositor -> new Object[] {expositor.priority, expositor.getVocabula(query, acceptSimilar)})
+				       .sorted(Comparator.comparingInt(tuple -> (int) tuple[0]))
 				       .flatMap(tuple -> ((Collection<Vocabula>) tuple[1]).stream())
 				       .collect(LinkedHashSet::new, Set::add, Set::addAll);
 	}

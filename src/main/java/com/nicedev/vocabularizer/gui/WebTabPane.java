@@ -134,24 +134,25 @@ public class WebTabPane extends TabPane {
 		Collection<Tab> tabs = getTabs().stream()
 				                       .skip(startIndex)
 				                       .filter(tabPredicate)
-				                       .limit(forEach ? Long.MAX_VALUE: 1)
+				                       .limit(forEach ? Long.MAX_VALUE : 1)
 				                       .collect(toList());
 		tabs.forEach(perform);
 		return tabs.size();
 	}
 	
-	private void tabInfo(Tab tab) {
+	/*private void tabInfo(Tab tab) {
 		System.out.printf("--------------------%n");
 		System.out.printf("Class: %s%n", tab.getClass().getSimpleName());
 		System.out.printf("Caption: %s%n", tab.getText());
 		System.out.printf("Tooltip: %s%n", tab.getTooltip().getText());
 		System.out.printf("--------------------%n");
-	}
+	}*/
 	
-	public void insertIfAbsent(List<String> tabTitles, Function<String, WebViewTab> tabSupplier, Class<? extends WebViewTab> suppliedClass) {
+	public void insertIfAbsent(List<String> tabTitles,
+	                           Function<String, WebViewTab> tabSupplier, Class<? extends WebViewTab> suppliedClass) {
 		List<String> presentTabs = tabTitles.stream()
 				                           .flatMap(s -> getTabs().stream()
-						                                         .filter(tab -> instanceOf(tab, suppliedClass))
+						                                         .filter(suppliedClass::isInstance)
 						                                         .map(tab -> tab.getTooltip().getText()))
 				                           .collect(toList());
 		tabTitles.stream()
@@ -160,19 +161,16 @@ public class WebTabPane extends TabPane {
 				.forEach(s -> insertTab(tabSupplier.apply(s), tabTitles.size() == 1));
 	}
 	
-	public void addIfAbsent(List<String> tabArgs, Function<String, WebViewTab> tabSupplier, Class<? extends WebViewTab> suppliedClass) {
+	public void addIfAbsent(List<String> tabArgs,
+	                        Function<String, WebViewTab> tabSupplier, Class<? extends WebViewTab> suppliedClass) {
 		List<String> presentTabs = tabArgs.stream()
 				                           .flatMap(s -> getTabs().stream()
-						                                         .filter(tab -> instanceOf(tab, suppliedClass))
+						                                         .filter(suppliedClass::isInstance)
 						                                         .map(tab -> tab.getTooltip().getText()))
 				                           .collect(toList());
 		tabArgs.stream()
 				.filter(s -> !presentTabs.contains(s))
 				.forEach(s -> addTab(tabSupplier.apply(s), tabArgs.size() == 1));
 	}
-	
-	private boolean instanceOf(Tab tab, Class<? extends WebViewTab> suppliedClass) {
-		return tab.getClass().equals(suppliedClass);
-	}
-	
+
 }

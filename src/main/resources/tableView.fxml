@@ -47,16 +47,23 @@
                 </Tooltip>
             </tooltip>
         </ToggleButton>
-      <ToggleButton fx:id="toggleRE" layoutX="55.0" layoutY="474.0" focusTraversable="false" mnemonicParsing="false" prefHeight="25.0" prefWidth="27.0" text="RE" textAlignment="CENTER" textOverrun="CLIP" onAction="#toggleUseRE" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="55.0">
-         <font>
-            <Font size="10.0" />
-         </font>
-         <tooltip>
-            <Tooltip text="use RegEx" />
-         </tooltip>
-      </ToggleButton>
-        <ComboBox fx:id="queryBox" editable="true" layoutX="109.0" layoutY="474.0" onKeyReleased="#onQueryBoxKeyReleased" prefHeight="25.0" prefWidth="382.0" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="109.0" AnchorPane.rightAnchor="209.0" />
-        <Button focusTraversable="false" layoutX="82.0" layoutY="474.0" mnemonicParsing="false" onAction="#onSearch" prefHeight="25.0" prefWidth="27.0" style="-fx-background-image: url(search.png); -fx-background-size: 23px; -fx-background-repeat: no-repeat; -fx-background-position: center;" AnchorPane.bottomAnchor="1.0">
+        <ToggleButton fx:id="toggleRE" layoutX="55.0" layoutY="474.0" focusTraversable="false" mnemonicParsing="false" prefHeight="25.0" prefWidth="27.0" text="RE" textAlignment="CENTER" textOverrun="CLIP" onAction="#toggleUseRE" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="55.0">
+            <font>
+                <Font size="10.0" />
+            </font>
+            <tooltip>
+                <Tooltip text="use RegEx" />
+            </tooltip>
+        </ToggleButton>
+        <ToggleButton fx:id="toggleSimilar" layoutX="82.0" layoutY="474.0" focusTraversable="false" mnemonicParsing="false" prefHeight="25.0" prefWidth="27.0" text="~" textAlignment="CENTER" textOverrun="CLIP" onAction="#toggleAcceptSimilar" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="82.0" selected="true">
+            <font>
+                <Font size="10.0" />
+            </font>
+            <tooltip>
+                <Tooltip text="Accept similar matches" />
+            </tooltip>
+        </ToggleButton>
+        <Button focusTraversable="false" layoutX="109.0" layoutY="474.0" mnemonicParsing="false" onAction="#onSearch" prefHeight="25.0" prefWidth="27.0" style="-fx-background-image: url(search.png); -fx-background-size: 23px; -fx-background-repeat: no-repeat; -fx-background-position: center;" AnchorPane.bottomAnchor="1.0">
             <tooltip>
                 <Tooltip text="Find definition" textOverrun="WORD_ELLIPSIS" wrapText="true">
                     <font>
@@ -65,5 +72,6 @@
                 </Tooltip>
             </tooltip>
         </Button>
+        <ComboBox fx:id="queryBox" editable="true" layoutX="136.0" layoutY="474.0" onKeyReleased="#onQueryBoxKeyReleased" prefHeight="25.0" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="136.0" AnchorPane.rightAnchor="222.0" />
     </children>
 </AnchorPane>
