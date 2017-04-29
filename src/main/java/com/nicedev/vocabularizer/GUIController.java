@@ -981,13 +981,11 @@ public class GUIController implements Initializable {
 					if (!vocabulas.isEmpty()) {
 						updateCount++;
 						int nAdded = dictionary.addVocabulas(vocabulas);
-						hwData.setAll(vocabulas.stream().map(v -> v.headWord).distinct().collect(toList()));
-						alterSearchIndex(vocabulas);
+						List<Vocabula> addedVs = dictionary.getVocabulas(vocabulas.stream().map(voc -> voc.headWord).collect(toList()));
+						hwData.setAll(addedVs.stream().map(vocabula -> vocabula.headWord).collect(toList()));
+						alterSearchIndex(addedVs);
 						if (nAdded == 1 && hwData.contains(cQuery)) {
-							Optional<Vocabula> optVoc = vocabulas.stream()
-									                            .filter(vocabula -> vocabula.headWord.equals(cQuery))
-									                            .findFirst();
-							showQueryResult(optVoc);
+							showQueryResult(addedVs.get(0));
 						} else {
 							hwData.setAll(vocabulas.stream().map(v -> v.headWord).distinct().collect(toList()));
 							Platform.runLater(() -> {
@@ -1137,7 +1135,7 @@ public class GUIController implements Initializable {
 	@SuppressWarnings("unchecked")
 	private Collection<Vocabula> findVocabula(String query, boolean acceptSimilar) {
 		return stream(expositors)
-					   .parallel()
+				       .parallel() ////todo: find out issue in parallel
 				       .map(expositor -> new Object[] {expositor.priority, expositor.getVocabula(query, acceptSimilar)})
 				       .sorted(Comparator.comparingInt(tuple -> (int) tuple[0]))
 				       .flatMap(tuple -> ((Collection<Vocabula>) tuple[1]).stream())
@@ -1281,6 +1279,7 @@ public class GUIController implements Initializable {
 										  .filter(s -> !s.matches("\\p{Punct}}"))
 				                          .flatMap(s -> Stream.of(s.split("[,.:;'/()\\s\\\\]"))
 						                                        .filter(Strings.notBlank)
+																.filter(sp -> !sp.matches("[+-]"))
 						                                        .distinct())
 				                          .collect(toSet());
 		HWs.addAll(separateHWs);
@@ -1289,6 +1288,12 @@ public class GUIController implements Initializable {
 	
 	private boolean isIndexingAborted() {
 		return Thread.currentThread().isInterrupted() || indexer.isCancelled();
+	}
+	
+	private Map<String, Collection<String>> indexFor(Vocabula vocabula) {
+		if (isIndexingAborted()) return emptyMap();
+		return indexFor(vocabula.getDefinitions(),
+						asList(hwFromKnownForms, hwFromDefinition, hwFromSynonyms, hwFromUseCases));
 	}
 	
 	private Map<String, Collection<String>> indexFor(Collection<Definition> definitions,
@@ -1357,10 +1362,5 @@ public class GUIController implements Initializable {
 		return result;
 	}
 	
-	private Map<String, Collection<String>> indexFor(Vocabula vocabula) {
-		if (isIndexingAborted()) return emptyMap();
-		return indexFor(vocabula.getDefinitions(),
-						asList(hwFromKnownForms, hwFromDefinition, hwFromSynonyms, hwFromUseCases));
-	}
 		
 }
