@@ -99,6 +99,11 @@ public class Definition implements Serializable, Comparable{
 	public int hashCode() {
 		return explanation.hashCode();
 	}
+	
+	private String emphasizeSynonym(String syn) {
+		String match = syn.contains("(") ? "^([^\\(]+)(( \\([^\\(\\)]+\\))+)$" : syn;
+		return match.startsWith("<b>") ? syn : wrapInTag(syn, match, "b", "");
+	}
 
 	@Override
 	public String toString() {
@@ -110,10 +115,7 @@ public class Definition implements Serializable, Comparable{
 		if (!synonyms.isEmpty())
 			res.append(String.format("\n      synonym%s: ", synonyms.size() > 1 ? "s" : ""))
 					.append(synonyms.stream()
-							        .map(s -> {
-								        String match = s.contains("(") ? "^([^\\(]+)(( \\([^\\(\\)]+\\))+)$" : s;
-								        return wrapInTag(s, match, "b", "");
-							        })
+							        .map(this::emphasizeSynonym)
 							        .collect(joining(", "))
 							        .replaceAll("<b>", "<").replaceAll("</b>",">"))
 					.append("\n");
@@ -139,13 +141,10 @@ public class Definition implements Serializable, Comparable{
 		if (!synonyms.isEmpty()){
 			res.append(String.format("\n<div class='synonym'>synonym%s: ", synonyms.size() > 1 ? "s" : ""))
 					.append(synonyms.stream()
-										.map(s -> {
-											String match = s.contains("(") ? "^([^\\(]+)(( \\([^\\(\\)]+\\))+)$" : s;
-											return wrapInTag(s, match, "b", "");
-										})
+										.map(this::emphasizeSynonym)
 										.collect(joining(", ")))
 					.append("</div>\n");
-//					.append("<b>").append(synonyms.stream().collect(joining("</b>, <b>"))).append("</b></div>\n");
+					//.append("<b>").append(synonyms.stream().collect(joining("</b>, <b>"))).append("</b></div>\n");
 		}
 		if (!useCases.isEmpty()){
 			res.append("\n<div><table><tr><td></td><td class='usecase'>")
