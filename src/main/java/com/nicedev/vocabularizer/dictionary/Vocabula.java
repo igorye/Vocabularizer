@@ -34,7 +34,7 @@ public class Vocabula implements Serializable, Comparable {
 	
 	public Vocabula(Vocabula partialVoc) {
 		this.headWord = partialVoc.headWord;
-		this.transcription = partialVoc.transcription.intern();
+		this.transcription = partialVoc.transcription;
 		this.identicalTo = partialVoc.identicalTo;
 		this.language = partialVoc.language;
 		this.isComposite = headWord.contains("\\s");
@@ -196,15 +196,18 @@ public class Vocabula implements Serializable, Comparable {
 		if (o == null || getClass() != o.getClass()) return false;
 		Vocabula other = (Vocabula) o;
 		return headWord.equals(other.headWord)
-				       && mapPOS.keySet().size() == other.mapPOS.keySet().size()
-				       && mapPOS.keySet().containsAll(other.mapPOS.keySet())
-				       && mapPOS.keySet().stream()
-						          .allMatch(pOS -> hasDecentDefinition(pOS) == other.hasDecentDefinition(pOS));
+				    && mapPOS.keySet().size() == other.mapPOS.keySet().size()
+				    && mapPOS.keySet().containsAll(other.mapPOS.keySet())
+				    && mapPOS.keySet().stream().allMatch(pOS -> mapPOS.get(pOS).containsAll(other.mapPOS.get(pOS)));
 	}
 	
 	@Override
 	public int hashCode() {
-		return 31 * headWord.hashCode() + mapPOS.hashCode();
+		int result = headWord.hashCode();
+		result = 31 * result + mapPOS.hashCode();
+		result = 31 * result + knownForms.hashCode();
+		result = 31 * result + transcription.hashCode();
+		return result;
 	}
 	
 	public boolean hasAccordance() {
@@ -348,10 +351,13 @@ public class Vocabula implements Serializable, Comparable {
 	public boolean hasDecentDefinition(PartOfSpeech partOfSpeech) {
 		return Optional.ofNullable(mapPOS.get(partOfSpeech))
 				       .filter(defs -> defs.size() == 1)
-				       .flatMap(defs -> defs.stream()
-						                        .findFirst()
-						                        .map(def -> !def.explanation.startsWith("see ")))
-				       .orElse(true);
+				       .map(defs -> defs.stream().noneMatch(def -> def.explanation.startsWith("see ")))
+				       .orElse(false);
+//				       .flatMap(defs -> defs.stream()
+//						                        .findFirst()
+//						                        .map(def -> !def.explanation.startsWith("see ")))
+//				       .orElse(true);
+	
 	}
 	
 	

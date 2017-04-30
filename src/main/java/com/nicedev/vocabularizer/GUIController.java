@@ -75,7 +75,7 @@ import static java.util.stream.Collectors.*;
 import static javafx.scene.input.KeyCode.SPACE;
 
 public class GUIController implements Initializable {
-
+	
 	private final int LIST_FILTERING_DELAY = 500;
 	private final int INPUT_FILTERING_DELAY = 400;
 	private final int PRONUNCIATION_DELAY = 500;
@@ -107,7 +107,7 @@ public class GUIController implements Initializable {
 	//	    @FXML private TabPane tabPane;
 	@FXML
 	private WebTabPane tabPane;
-
+	
 	private static final int FILTER_DELAY = 500;
 	private static final boolean ALLOW_PARALLEL_STREAM = Boolean.valueOf(System.getProperty("allowParallelStream", "false"));
 	private static final int INDEXING_ALGO = Integer.valueOf(System.getProperty("indexingAlgo", "0"));
@@ -146,14 +146,14 @@ public class GUIController implements Initializable {
 	private Future<Boolean> indexer;
 	private int leastSelectedIndex;
 	private int caretPos = 0;
-
-
+	
+	
 	public GUIController() {
 		String res = getClass().getProtectionDomain().getClassLoader().getResource("view.css").toExternalForm();
 		cssHref = res != null ? res : "";
 		res = getClass().getProtectionDomain().getClassLoader().getResource("view.js").toExternalForm();
 		jsHref = res != null ? res : "";
-
+		
 		Function<String, Task<Collection<String>>> queryFilterTaskProvider = pattern -> new Task<Collection<String>>() {
 			@Override
 			protected Collection<String> call() throws Exception {
@@ -337,7 +337,7 @@ public class GUIController implements Initializable {
 		}
 	};
 */
-
+	
 	private ChangeListener<Boolean> tabPaneFocusChangeListener = (observable, oldValue, newValue) -> {
 		if (newValue) tabPane.getActiveTab().getContent().requestFocus();
 	};
@@ -370,7 +370,7 @@ public class GUIController implements Initializable {
 	private ChangeListener<Boolean> queryBoxShowingChangeListener = (observable, oldValue, newValue) -> {
 		if (newValue) clearOnEsc = !newValue;
 	};
-
+	
 	private ChangeListener<String> queryBoxValueChangeListener = (observable, oldValue, newValue) -> {
 		log("queryBoxValueChangeListener: filterOn==%s, value==%s", filterOn, newValue);
 		if (filterOn) {
@@ -590,7 +590,7 @@ public class GUIController implements Initializable {
 		Platform.runLater(() -> hwData.setAll(filterList(queryBoxValue.getValue())));
 		queryBox.requestFocus();
 	}
-
+	
 	@FXML
 	public void toggleAcceptSimilar(ActionEvent actionEvent) {
 		if (toggleSimilar.isSelected()) onSearch(actionEvent);
@@ -641,9 +641,9 @@ public class GUIController implements Initializable {
 	private String composeRE(String text) {
 		//log("composeRE: composed==%s", composed);
 		return (!toggleRE.isSelected()) ? Stream.of(text.split("(?=\\p{Punct})"))
-											.map(s -> (s.matches("\\p{Punct}.*")) ? "\\".concat(s) : s)
-											.collect(joining())
-										: text;
+				                                  .map(s -> (s.matches("\\p{Punct}.*")) ? "\\".concat(s) : s)
+				                                  .collect(joining())
+				       : text;
 	}
 	
 	private void rebuildIndex() {
@@ -738,7 +738,7 @@ public class GUIController implements Initializable {
 			filterCache.putPersistent(filterList(ALL_MATCH));
 			try {
 //				log("resetCache: queryBoxValue==\"%s\"", queryBoxValue.getValue());
-				ofNullable(mainTab.getText()).ifPresent(val -> hwData.setAll(filterList(val)));
+				ofNullable(mainTab.getText()).filter(String::isEmpty).ifPresent(val -> hwData.setAll(filterList(val)));
 			} catch (Exception e) {
 				log("reset cache: unexpected exception - %s | %s", e.getMessage(), e.getCause().getMessage());
 			}
@@ -776,7 +776,7 @@ public class GUIController implements Initializable {
 			tabPane.getActiveTab().getContent().setCursor(cursor);
 		});
 	}
-
+	
 	public class JSBridge {
 		public void jsHandleQuery(String headWord) {
 			log("jsBridge: jsHandleQuery: requested %s", headWord);
@@ -836,7 +836,7 @@ public class GUIController implements Initializable {
 		Optional<Optional<Vocabula>> userData = ofNullable((Optional<Vocabula>) newTab.getContent().getUserData());
 		return userData.filter(Optional::isPresent).map(Optional::get);
 	}
-
+	
 	private Function<String, WebViewTab> translationTabSupplier(Function<String, String> requestFormatter) {
 		return (title) -> {
 			WebViewTab newTab = new TranslationTab(title, requestFormatter.apply(encodeURL(title)));
@@ -892,23 +892,23 @@ public class GUIController implements Initializable {
 	private void appendContextMenuItems(Object contextMenu, Optional<String> context) {
 		EventHandler<ActionEvent> handleQueryEH = this::onSearch;
 		GUIUtil.addMenuItem("Explain", handleQueryEH, contextMenu);
-
+		
 		Function<String, String> requestFormatterGT = s -> format(GT_REQUEST_URL, foreignLanguage, localLanguage, s);
 		EventHandler<ActionEvent> showGTTranslationEH = e -> showTranslation(context, requestFormatterGT);
-
+		
 		Function<String, String> requestFormatterWH = s -> format(WH_REQUEST_URL, s);
 		EventHandler<ActionEvent> showWHTranslationEH = e -> showTranslation(context, requestFormatterWH);
-
+		
 		Menu translations = new Menu("Translate");
 		GUIUtil.addMenuItem(" via Google", showGTTranslationEH, translations);
 		GUIUtil.addMenuItem(" via WooordHunt", showWHTranslationEH, translations);
 		GUIUtil.addMenuItem(translations, contextMenu);
-
+		
 		EventHandler<ActionEvent> pronounceEH = e -> pronounce(context);
 		GUIUtil.addMenuItem("Pronounce", pronounceEH, contextMenu);
-
+		
 		GUIUtil.addMenuItem("", null, contextMenu);
-
+		
 		EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadword(context);
 		GUIUtil.addMenuItem("Delete headword", deleteHeadwordEH, contextMenu);
 	}
@@ -976,17 +976,21 @@ public class GUIController implements Initializable {
 					showQueryResult(optVocabula);
 				} else {
 					boolean acceptSimilar = filteredQuery.startsWith("~") || toggleSimilar.isSelected();
-					Collection<Vocabula> vocabulas = findVocabula(cQuery, acceptSimilar);
+					Set<Vocabula> vocabulas = findVocabula(cQuery, acceptSimilar);
 					if (!vocabulas.isEmpty()) {
+						Function<Set<Vocabula>, Set<Vocabula>> availableOf = vocabulaSet -> {
+							return dictionary.getVocabulas(vocabulaSet.stream().map(voc -> voc.headWord).collect(toSet()));
+						};
+						Set<Vocabula> availableVs = availableOf.apply(vocabulas);
 						int nAdded = dictionary.addVocabulas(vocabulas);
 						if (nAdded > 0)	updateCount++;
-						List<Vocabula> addedVs = dictionary.getVocabulas(vocabulas.stream().map(voc -> voc.headWord).collect(toList()));
-						hwData.setAll(addedVs.stream().map(vocabula -> vocabula.headWord).collect(toList()));
+						Set<Vocabula> addedVs = availableOf.apply(vocabulas);
+						addedVs.removeAll(availableVs);
+						hwData.setAll(addedVs.stream().map(v -> v.headWord).collect(toList()));
 						alterSearchIndex(addedVs);
-						if (nAdded == 1 && hwData.contains(cQuery)) {
-							showQueryResult(addedVs.get(0));
+						if (nAdded == 1 && hwData.contains(cQuery) ) {
+							showQueryResult(addedVs.iterator().next());
 						} else {
-							hwData.setAll(vocabulas.stream().map(v -> v.headWord).distinct().collect(toList()));
 							Platform.runLater(() -> {
 								tabPane.removeTab(cQuery);
 								tabPane.selectTab(mainTab);
@@ -1057,7 +1061,7 @@ public class GUIController implements Initializable {
 		if (ctrlIsDown || tabPane.getTabs().size() == 1 || (currentTab instanceof TranslationTab)
 				    || (!tabPane.trySelectTab(ExpositorTab.sameTab(vocabula.headWord))
 						        && !(currentTab instanceof ExpositorTab
-											|| tabPane.trySelectTab(tab -> tab instanceof ExpositorTab)))) {
+								             || tabPane.trySelectTab(tab -> tab instanceof ExpositorTab)))) {
 			tabPane.insertTab(expositorTabSupplier.apply(vocabula.headWord), true);
 		} else {
 			currentTab = tabPane.getActiveTab();
@@ -1132,15 +1136,15 @@ public class GUIController implements Initializable {
 		return queryText;
 	}
 	@SuppressWarnings("unchecked")
-	private Collection<Vocabula> findVocabula(String query, boolean acceptSimilar) {
+	private Set<Vocabula> findVocabula(String query, boolean acceptSimilar) {
 		return Stream.of(expositors)
-				       .parallel() ////todo: find out issue in parallel
+				       .parallel()
 				       .map(expositor -> new Object[] {expositor.priority, expositor.getVocabula(query, acceptSimilar)})
 				       .sorted(Comparator.comparingInt(tuple -> (int) tuple[0]))
 				       .flatMap(tuple -> ((Collection<Vocabula>) tuple[1]).stream())
 				       .collect(LinkedHashSet::new, Set::add, Set::addAll);
 	}
-
+	
 	private void pronounce(Optional<String> selection) {
 		Platform.runLater(() -> {
 			pronouncingService.clear();
@@ -1154,7 +1158,7 @@ public class GUIController implements Initializable {
 		Iterator<String> sIt = vocabula.getPronunciationSources().iterator();
 		if (sIt.hasNext()) pronouncingService.pronounce(sIt.next(), PRONUNCIATION_DELAY);
 		else pronouncingService.pronounce(vocabula.headWord, PRONUNCIATION_DELAY);
-
+		
 	}
 	
 	private List<String> getSuggestions(String match) {
@@ -1240,17 +1244,17 @@ public class GUIController implements Initializable {
 	
 	private Predicate<String> bTagWrapped = s -> s.contains("<b>");
 	
-	private Function<Definition, Stream<String>> hwFromDefinition = def -> {
+	private Function<Definition, Stream<String>> hwsFromDefinition = def -> {
 		if (isIndexingAborted()) return Stream.empty();
 		return hwCollector(singleton(def.explanation), bTagWrapped, this::extract_bTag_Wrapped);
 	};
 	
-	private Function<Definition, Stream<String>> hwFromKnownForms = def -> {
+	private Function<Definition, Stream<String>> hwsFromKnownForms = def -> {
 		if (isIndexingAborted()) return Stream.empty();
 		return hwCollector(def.getDefinedVocabula().getKnownForms(), allMatch, Stream::of);
 	};
 	
-	private Function<Definition, Stream<String>> hwFromSynonyms = def -> {
+	private Function<Definition, Stream<String>> hwsFromSynonyms = def -> {
 		if (isIndexingAborted()) return Stream.empty();
 		return hwCollector(def.getSynonyms(), allMatch, this::extractSynonym);
 	};
@@ -1259,12 +1263,12 @@ public class GUIController implements Initializable {
 		return s.contains("(") ? extract_bTag_Wrapped(s) : Stream.of(s);
 	}
 	
-	private Function<Definition, Stream<String>> hwFromUseCases = def -> {
+	private Function<Definition, Stream<String>> hwsFromUseCases = def -> {
 		if (isIndexingAborted()) return Stream.empty();
 		return hwCollector(def.getUseCases(), bTagWrapped, this::extract_bTag_Wrapped);
 	};
 	
-	private Stream<String> hwCollector(Set<String> source,
+	private Stream<String> hwCollector(Collection<String> source,
 	                                   Predicate<String> hwMatcher,
 	                                   Function<String, Stream<String>> hwExtractor) {
 		return source.stream().filter(hwMatcher).flatMap(hwExtractor).filter(Strings::notBlank);
@@ -1272,13 +1276,13 @@ public class GUIController implements Initializable {
 	
 	private Stream<String> extract_bTag_Wrapped(String source) {
 		Set<String> HWs = new HashSet<>();
-		Matcher matcher = Pattern.compile("<b>((?<=<b>)[^<>]+(?=</b>))</b>").matcher(source);
+		Matcher matcher = Pattern.compile("(?<=^|[\\s-=()])<b>([^<>]+)</b>(?=\\p{Punct}|\\s|$)").matcher(source);
 		while (matcher.find()) HWs.add(matcher.group(1).trim());
 		Set<String> separateHWs = HWs.stream()
-										  .filter(s -> !s.matches("\\p{Punct}}"))
+				                          .filter(s -> !s.matches("\\p{Punct}}"))
 				                          .flatMap(s -> Stream.of(s.split("[,.:;'/()\\s\\\\]"))
 						                                        .filter(Strings.notBlank)
-																.filter(sp -> !sp.matches("[+-]"))
+						                                        .filter(sp -> !sp.matches("[+-]"))
 						                                        .distinct())
 				                          .collect(toSet());
 		HWs.addAll(separateHWs);
@@ -1292,9 +1296,9 @@ public class GUIController implements Initializable {
 	private Map<String, Collection<String>> indexFor(Vocabula vocabula) {
 		if (isIndexingAborted()) return emptyMap();
 		return indexFor(vocabula.getDefinitions(),
-						asList(hwFromKnownForms, hwFromDefinition, hwFromSynonyms, hwFromUseCases));
+				asList(hwsFromKnownForms, hwsFromDefinition, hwsFromSynonyms, hwsFromUseCases));
 	}
-
+	
 	private Map<String, Collection<String>> indexFor(Collection<Definition> definitions,
 	                                                 Collection<Function<Definition, Stream<String>>> hwSuppliers) {
 		if (definitions.isEmpty() || isIndexingAborted()) return emptyMap();
@@ -1309,7 +1313,10 @@ public class GUIController implements Initializable {
 			getStream(hwSuppliers, ALLOW_PARALLEL_STREAM)
 					.flatMap(supplier -> supplier.apply(definition))
 					.forEach(hw -> {
-						String fHW = hw.matches("\\p{Lu}+|\\p{Lu}\\p{L}+(\\W\\p{Lu}\\p{L}+)+") ? hw : hw.toLowerCase();
+						String fHW = hw.matches("\\p{Lu}+|\\p{Lu}\\p{L}+(\\W\\p{Lu}\\p{L}+)+" +
+								                    "|\\p{L}+(\\W\\p{L}*\\W?\\p{Lu}(\\p{L}|\\p{Lu})+)+")
+								             ? hw
+								             : hw.toLowerCase();
 						Collection<String> refs = resultMap.computeIfAbsent(fHW, keyMapper);
 						refs.add(definedAt);
 						refs.add(fHW);
@@ -1360,6 +1367,6 @@ public class GUIController implements Initializable {
 		Maps.mergeLeft(result, m2, ALLOW_PARALLEL_STREAM);
 		return result;
 	}
-
-		
+	
+	
 }

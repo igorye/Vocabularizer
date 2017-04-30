@@ -192,15 +192,15 @@ public class Dictionary implements Serializable{
 		return Collections.emptyList();
 	}
 
-	public List<Vocabula> getVocabulas(Collection<String> headwords) {
-		if (headwords.isEmpty()) return Collections.emptyList();
+	public Set<Vocabula> getVocabulas(Collection<String> headwords) {
+		if (headwords.isEmpty()) return Collections.emptySet();
 		if (getVocabulaCount() != 0) {
 			return headwords.stream()
-					       .filter(hw -> articles.containsKey(hw))
-					       .map(hw -> articles.get(hw))
-					       .collect(toList());
+					       .filter(articles::containsKey)
+					       .map(articles::get)
+					       .collect(toSet());
 		}
-		return Collections.emptyList();
+		return Collections.emptySet();
 	}
 	
 	public List<Vocabula> filterVocabulas(String filter) {
