@@ -1134,7 +1134,7 @@ public class GUIController implements Initializable {
 	@SuppressWarnings("unchecked")
 	private Collection<Vocabula> findVocabula(String query, boolean acceptSimilar) {
 		return Stream.of(expositors)
-				       .parallel() ////todo: find out issue in parallel
+				       .parallel()
 				       .map(expositor -> new Object[] {expositor.priority, expositor.getVocabula(query, acceptSimilar)})
 				       .sorted(Comparator.comparingInt(tuple -> (int) tuple[0]))
 				       .flatMap(tuple -> ((Collection<Vocabula>) tuple[1]).stream())
