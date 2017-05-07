@@ -90,8 +90,6 @@ public class GUIController implements Initializable {
 	@FXML
 	private ToggleButton toggleRE;
 	@FXML
-	private Button searchBtn;
-	@FXML
 	private TableView<String> hwTable;
 	@FXML
 	private TableColumn<String, String> hwColumn;
@@ -121,8 +119,7 @@ public class GUIController implements Initializable {
 	private final String HISTORY_FILENAME = "vocabularizer.history";
 	private final String cssHref;
 	private final String jsHref;
-	private int indexingTimeout = 45;
-	public static String storageEn = format("%s\\%s.dict", HOME_PATH, "english");
+	private static String storageEn = format("%s\\%s.dict", HOME_PATH, "english");
 	private String localLanguage;
 	private String foreignLanguage;
 	private Scene mainScene;
@@ -147,7 +144,7 @@ public class GUIController implements Initializable {
 	private int leastSelectedIndex;
 	private int caretPos = 0;
 	
-	
+	@SuppressWarnings("unchecked")
 	public GUIController() {
 		String res = getClass().getProtectionDomain().getClassLoader().getResource("view.css").toExternalForm();
 		cssHref = res != null ? res : "";
@@ -213,7 +210,7 @@ public class GUIController implements Initializable {
 	}
 	
 	
-	public void setMainScene(Scene scene) {
+	void setMainScene(Scene scene) {
 		mainScene = scene;
 	}
 	
@@ -280,7 +277,7 @@ public class GUIController implements Initializable {
 		});
 	}*/
 	
-	public void initIndex() {
+	protected void initIndex() {
 		fullSearchIndex = dictionary.filterHeadwords("", "i").stream()
 				                  .collect(TreeMap::new, (map, s) -> map.put(s, singleton(s)), Map::putAll);
 		//initializing mock-job
@@ -368,7 +365,7 @@ public class GUIController implements Initializable {
 	};
 	
 	private ChangeListener<Boolean> queryBoxShowingChangeListener = (observable, oldValue, newValue) -> {
-		if (newValue) clearOnEsc = !newValue;
+		if (newValue) clearOnEsc = false;
 	};
 	
 	private ChangeListener<String> queryBoxValueChangeListener = (observable, oldValue, newValue) -> {
@@ -409,7 +406,7 @@ public class GUIController implements Initializable {
 	 *  handlers                        *
 	 *                                  *
 	 ***********************************/
-	
+	@SuppressWarnings("unused")
 	private EventHandler<ScrollEvent> onScrollEventHandler() {
 		return event -> tabPane.getActiveEngine().ifPresent(we -> {
 			if (event.isControlDown()) {
@@ -421,7 +418,7 @@ public class GUIController implements Initializable {
 	}
 	
 	@FXML
-	protected void onTableMousePressed(MouseEvent event) {
+	protected void onTableMousePressed(@SuppressWarnings("unused") MouseEvent event) {
 		log("onTableMousePressed");
 		engageTableSelectedItemFiltering();
 		int selectedIndex = hwTable.getSelectionModel().getSelectedIndex();
@@ -433,7 +430,7 @@ public class GUIController implements Initializable {
 	}
 	
 	@FXML
-	protected void onTableMouseReleased(MouseEvent event) {
+	protected void onTableMouseReleased(@SuppressWarnings("unused") MouseEvent event) {
 		tableItemFiltering.cancel();
 	}
 	
@@ -525,7 +522,7 @@ public class GUIController implements Initializable {
 		event.consume();
 	}
 	
-	protected EventHandler<KeyEvent> queryBoxEventFilter = event -> {
+	private EventHandler<KeyEvent> queryBoxEventFilter = event -> {
 		if (!clearOnEsc && event.getCode() == KeyCode.ESCAPE) {
 			queryBox.hide();
 			clearOnEsc = true;
@@ -613,10 +610,9 @@ public class GUIController implements Initializable {
 	}
 	
 	@FXML
-	protected void onSearch(ActionEvent event) {
+	protected void onSearch(@SuppressWarnings("unused") ActionEvent event) {
 		updateTableState();
 		Node source = relevantSelectionOwner;
-		String query = getSelectedText();
 		Event.fireEvent(source, new KeyEvent(source, source, KeyEvent.KEY_RELEASED, "", "", KeyCode.ENTER,
 				                                    false, true, false, false));
 	}
@@ -778,6 +774,7 @@ public class GUIController implements Initializable {
 	}
 	
 	public class JSBridge {
+		@SuppressWarnings("unused")
 		public void jsHandleQuery(String headWord) {
 			log("jsBridge: jsHandleQuery: requested %s", headWord);
 			handleQuery(headWord);
@@ -943,16 +940,17 @@ public class GUIController implements Initializable {
 					                 .collect(joining("\n"));
 			bw.write(history);
 		} catch (IOException e) {
+			// NOP
 		}
 	}
 	
 	private void loadRecentQueries() {
 		try (BufferedReader br = Files.newBufferedReader(Paths.get(HOME_PATH, HISTORY_FILENAME))) {
 			br.mark(1_000_000);
-			int linesCount = (int) br.lines().count();
 			br.reset();
 			queryBox.getItems().setAll(br.lines().limit(RECENT_QUERIES_TO_LOAD).collect(toList()));
 		} catch (IOException | ClassCastException e) {
+			//NOP
 		}
 	}
 	
@@ -973,7 +971,7 @@ public class GUIController implements Initializable {
 				Optional<Vocabula> optVocabula = dictionary.getVocabula(filteredQuery);
 				String cQuery = filteredQuery.replaceAll("~", "").trim();
 				if (optVocabula.isPresent()) {
-					showQueryResult(optVocabula);
+					showQueryResult(optVocabula.get());
 				} else {
 					boolean acceptSimilar = filteredQuery.startsWith("~") || toggleSimilar.isSelected();
 					Set<Vocabula> vocabulas = findVocabula(cQuery, acceptSimilar);
@@ -1002,7 +1000,7 @@ public class GUIController implements Initializable {
 					} else {
 						Optional<Vocabula> featuredVocabula = getFeaturedVocabula(cQuery);
 						if (featuredVocabula.isPresent()) {
-							showQueryResult(featuredVocabula);
+							showQueryResult(featuredVocabula.get());
 						} else {
 							hwData.setAll(getSuggestions(cQuery));
 							Platform.runLater(() -> {
@@ -1025,7 +1023,7 @@ public class GUIController implements Initializable {
 		});
 	}
 	
-	private boolean saveDictionary() {
+	private @SuppressWarnings("unused") boolean saveDictionary() {
 		saveRecentQueries();
 		return Dictionary.save(dictionary, storageEn);
 	}
@@ -1033,8 +1031,8 @@ public class GUIController implements Initializable {
 	private void appendRequestHistory(String query) {
 		boolean oldState = filterOn;
 		filterOn = false;
-		int index;
 		queryBox.getItems().add(0, query);
+		int index;
 		while((index = queryBox.getItems().indexOf(query)) > 0) queryBox.getItems().remove(index);
 		filterOn = oldState;
 		queryBox.getSelectionModel().select(0);
@@ -1046,10 +1044,6 @@ public class GUIController implements Initializable {
 				       .filter(hw -> !hw.equals(headWord) && (filterList(hw).contains(headWord) || mentions.size() == 2))
 				       .findFirst()
 				       .flatMap(hw -> dictionary.getVocabula(hw));
-	}
-	
-	private void showQueryResult(Optional<Vocabula> optVocabula) {
-		optVocabula.ifPresent(this::showQueryResult);
 	}
 	
 	private void showQueryResult(Vocabula vocabula) {
@@ -1076,8 +1070,9 @@ public class GUIController implements Initializable {
 	}
 	
 	private void deleteHeadword(Optional<String> selection) {
-		Collection<String> headwords = selection.map(s -> Stream.of(s.split("\\n|\\r|\\f"))
-				                                                  .filter(Strings::notBlank).collect(toList()))
+		Collection<String> headwords = selection
+				                               .map(s -> Stream.of(s.split("[\\n\\r\\f]"))
+						                                         .filter(Strings::notBlank).collect(toList()))
 				                               .orElse(selectedHWItems).stream().collect(toList());
 		int count = headwords.size();
 		Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, getDeleteMsg(count), ButtonType.YES, ButtonType.NO);
@@ -1118,10 +1113,6 @@ public class GUIController implements Initializable {
 		return format("You're about to delete %d headword%s. Continue?", count, count > 1 ? "s" : "");
 	}
 	
-	private void updateStatistics() {
-		updateStatistics(true);
-	}
-	
 	private void updateStatistics(boolean invalidateIndex) {
 		Platform.runLater(() -> stats.setText(dictionary.toString()));
 		if (invalidateIndex) rebuildIndex();
@@ -1135,6 +1126,7 @@ public class GUIController implements Initializable {
 		if (trimPos > 0) queryText = queryText.substring(0, trimPos).trim();
 		return queryText;
 	}
+	
 	@SuppressWarnings("unchecked")
 	private Set<Vocabula> findVocabula(String query, boolean acceptSimilar) {
 		return Stream.of(expositors)
@@ -1191,20 +1183,17 @@ public class GUIController implements Initializable {
 	
 	private String enableAnchors(String body) {
 		Matcher bToA = Pattern.compile("(<b>([^<>]+)</b>)").matcher(body);
-		String modifiedBody = body;
 		String aFmt = "<a href=\"#\" onclick=\"explainHeadWord(this);\">%s</a>";
 		String headWord = getAssignedVocabula(tabPane.getActiveTab())
 				                  .map(vocabula -> vocabula.headWord)
 				                  .orElse(tabPane.getActiveTab().getTooltip().getText());
+		String alteredBody = body;
 		while (bToA.find()) {
 			String replaced = bToA.group(1).replaceAll("\\(", "\\\\(").replaceAll("\\)", "\\\\)");
 			String anchored = bToA.group(2);
-			if (!anchored.equals(headWord)) {
-				int i = modifiedBody.indexOf(replaced);
-				modifiedBody = modifiedBody.replaceAll(replaced, String.format(aFmt, anchored));
-			}
+			if (!anchored.equals(headWord)) alteredBody = alteredBody.replaceAll(replaced, String.format(aFmt, anchored));
 		}
-		return modifiedBody;
+		return alteredBody;
 	}
 	
 	private List<String> filterList(String pattern) {
@@ -1216,7 +1205,7 @@ public class GUIController implements Initializable {
 	private Function<String, List<String>> filteredListSupplier = pattern -> {
 		String patternLC = pattern.toLowerCase();
 		String validPattern = getValidPattern(composeRE(pattern), "i");
-		Predicate<String> definedPartOfSpeech = hw -> !dictionary.getPartsOfSpeech(hw).isEmpty();
+//		Predicate<String> definedPartOfSpeech = hw -> !dictionary.getPartsOfSpeech(hw).isEmpty();
 //		Comparator<String> partialMatchComparator = firstComparing(definedPartOfSpeech)
 //				                                            .thenComparing(startsWithCmpr(pattern))
 //				                                            .thenComparing(indexOfCmpr(pattern))
@@ -1282,7 +1271,7 @@ public class GUIController implements Initializable {
 				                          .filter(s -> !s.matches("\\p{Punct}}"))
 				                          .flatMap(s -> Stream.of(s.split("[,.:;'/()\\s\\\\]"))
 						                                        .filter(Strings.notBlank)
-						                                        .filter(sp -> !sp.matches("[+-]"))
+						                                        .filter(sp -> !sp.matches("\\p{Punct}"))
 						                                        .distinct())
 				                          .collect(toSet());
 		HWs.addAll(separateHWs);

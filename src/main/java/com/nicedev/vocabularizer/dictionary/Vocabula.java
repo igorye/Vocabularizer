@@ -154,10 +154,6 @@ public class Vocabula implements Serializable, Comparable {
 		mapPOS.putIfAbsent(partOfSpeech, defs);
 	}
 	
-	public void addPartsOfSpeechIf(Set<Definition> definitions) {
-		
-	}
-	
 	public void addDefinitions(Vocabula vocabula) {
 		if (!headWord.equals(vocabula.headWord)) return;
 		vocabula.mapPOS.keySet().forEach(pos -> mapPOS.putIfAbsent(pos, vocabula.mapPOS.get(pos)));
@@ -307,30 +303,12 @@ public class Vocabula implements Serializable, Comparable {
 		return getKnownForms(new PartOfSpeech(language, PartOfSpeech.ANY));
 	}
 	
-	
-//	public Map<PartOfSpeech, Set<Definition>> getPartOfSpeech(PartOfSpeech partOfSpeech) {
-//		return ((SortedMap) mapPOS).subMap(partOfSpeech, partOfSpeech);
-//	}
-	
 	public void addSynonym(String definition, String synonym) {
-		
+	
 	}
 	
 	public void addSynonyms(String definition, Collection<String> synonyms) {
 		
-	}
-	
-	public void addUnresolvedAccordances(Definition definition) {
-		if (unresolvedAccordances == null)
-			unresolvedAccordances = new LinkedHashSet<>();
-		unresolvedAccordances.add(definition);
-	}
-	
-	public boolean needToResolveAccordances() {
-		return unresolvedAccordances.isEmpty();
-	}
-	
-	public void resolveAccordances() {
 	}
 	
 	public void addKnownForms(String partOfSpeechName, Collection<String> newForms) {
@@ -352,12 +330,7 @@ public class Vocabula implements Serializable, Comparable {
 		return Optional.ofNullable(mapPOS.get(partOfSpeech))
 				       .filter(defs -> defs.size() == 1)
 				       .map(defs -> defs.stream().noneMatch(def -> def.explanation.startsWith("see ")))
-				       .orElse(false);
-//				       .flatMap(defs -> defs.stream()
-//						                        .findFirst()
-//						                        .map(def -> !def.explanation.startsWith("see ")))
-//				       .orElse(true);
-	
+				       .orElse(true);
 	}
 	
 	

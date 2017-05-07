@@ -22,6 +22,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
@@ -36,7 +37,12 @@ import static org.w3c.dom.Node.TEXT_NODE;
 
 
 public class Expositor {
-
+	
+	private static final String PART_OF_SPEECH_CONTRACTION = "contraction";
+	private static final String PART_OF_SPEECH_VERB = "verb";
+	private static final String DASH = String.valueOf((char) 8211);
+	private static final String HYPHEN = "-";
+	private static final String ASTERISK = "*";
 	public final Language language;
 	public final int priority;
 	private static int instantiated = 0;
@@ -44,12 +50,13 @@ public class Expositor {
 	final private String LEARNERS_REQUEST_FMT = "http://www.dictionaryapi.com/api/v1/references/learners/xml/%s?key=%s";
 	final private String COLLEGIATE_KEY = "f0a68804-fd23-4eca-ba8b-037f5d156a1f";
 	final private String LEARNERS_KEY = "fe9645ff-73f8-4b3f-b09c-dc96b12f767f";
+	private final String FORMS_DEFINITION_PREFIX = "form of";
 	private String expositorRequestFmt;
 	private String key;
-	private Collection<String> recentQuerySuggestions = new ArrayList<>();
+	private Set<String> recentQuerySuggestions = new LinkedHashSet<>();
 
 	private XPath xPath;
-
+	
 	public Expositor(String langName, boolean switchedSource) {
 		language = new Language(langName);
 		initKeys(switchedSource);
@@ -57,6 +64,7 @@ public class Expositor {
 	}
 
 	public Expositor(Dictionary dictionary, boolean switchedSource) {
+//		language = new Language("english", "en");
 		language = dictionary.language;
 		initKeys(switchedSource);
 		priority = instantiated++;
@@ -72,8 +80,9 @@ public class Expositor {
 		}
 	}
 
-	public Collection<Vocabula> getVocabula(String entry, boolean acceptSimilar) {
+	public Set<Vocabula> getVocabula(String entry, boolean acceptSimilar) {
 		Optional<String> encodedEntry;
+		recentQuerySuggestions.clear();
 		try {
 			String filteredEntry = String.join(" ", entry.split("[\\\\/?&]")).replaceAll("\\s{2,}", " ").trim();
 			encodedEntry = Optional.of(URLEncoder.encode(filteredEntry, "UTF-8"));
@@ -95,13 +104,13 @@ public class Expositor {
 		} catch (InterruptedException e) {
 			//ignore PronouncingService's existence
 		}
-		return Collections.emptyList();
+		return Collections.emptySet();
 	}
 
 	private class SearchResult implements Comparable<SearchResult> {
-		final public String entry;
-		final public Node foundAt;
-		final public boolean perfectMatch;
+		final String entry;
+		final Node foundAt;
+		final boolean perfectMatch;
 
 		public SearchResult(String entry, Node foundAt) {
 			this(entry, foundAt, true);
@@ -133,185 +142,126 @@ public class Expositor {
 			result = 31 * result + foundAt.hashCode();
 			return result;
 		}
-
-		@Override
 		public int compareTo(SearchResult other) {
 			return entry.compareTo(other.entry);
 		}
 
-		public boolean sameOrigin(SearchResult other) {
+		boolean sameOrigin(SearchResult other) {
 			return foundAt == other.foundAt;
 		}
 
 	}
 
-	private Collection<Vocabula> extractVocabula(String query, Document xmlDoc, boolean acceptSimilar)
+	private Set<Vocabula> extractVocabula(String query, Document xmlDoc, boolean acceptSimilar)
 			throws XPathExpressionException, InterruptedException {
-		XPathFactory xpFactory = XPathFactory.newInstance();
-		xPath = xpFactory.newXPath();
+		XPathFactory xPathFactory = XPathFactory.newInstance();
+		xPath = xPathFactory.newXPath();
 		Node rootNode = (Node) xPath.evaluate("/entry_list", xmlDoc, NODE);
-		Collection<Vocabula> extracted = new HashSet<>();
-		recentQuerySuggestions = new ArrayList<>();
-		recentQuerySuggestions.clear();
-		Optional<Vocabula> newVoc = Optional.empty();
+		Set<Vocabula> extracted = new HashSet<>();
+		Optional<Vocabula> optNewVocabula = Optional.empty();
 		//find headwords
-		Collection<SearchResult> headWords = findEntries(query, rootNode, acceptSimilar);
-		//retrieve available information for each headword
-		if (!headWords.isEmpty()) {
-			for (SearchResult headWordSR : headWords) {
-				Set<String> partsOfSpeech = new LinkedHashSet<>();
-				Collection<String> pronunciationURLs = findPronunciation(headWordSR);
-				SearchResult transcription = findTranscription(headWordSR.foundAt);
-				if (!newVoc.isPresent() || newVoc.filter(nV -> !nV.headWord.equals(headWordSR.entry)).isPresent()) {
-					newVoc.ifPresent(extracted::add);
-					newVoc = Optional.of(new Vocabula(headWordSR.entry, language, transcription.entry));
+		Set<SearchResult> headWordsSR = findEntriesSR(query, rootNode, acceptSimilar);
+		if (!headWordsSR.isEmpty()) {
+			Consumer<Vocabula> removeUndefinedPOS = vocabula -> {
+				// only sole undefined part of speech allowed
+				if (vocabula.getPartsOfSpeech().size() > 1) vocabula.removePartOfSpeech(PartOfSpeech.UNDEFINED);
+			};
+			//retrieve available information for each headword
+			for (SearchResult headWordSR : headWordsSR) {
+				Set<String> partsOfSpeech = new HashSet<>();
+				List<String> pronunciationURLs = findPronunciation(headWordSR);
+				SearchResult transcription = findTranscriptionSR(headWordSR.foundAt);
+				if (!optNewVocabula.isPresent() || optNewVocabula.filter(nV -> !nV.headWord.equals(headWordSR.entry)).isPresent()) {
+					optNewVocabula.ifPresent(removeUndefinedPOS.andThen(extracted::add));
+					optNewVocabula = Optional.of(new Vocabula(headWordSR.entry, language, transcription.entry));
 				}
 				if (!transcription.entry.isEmpty())
 					extracted.stream()
 							.filter(v -> v.getTranscription().isEmpty() && v.headWord.equalsIgnoreCase(headWordSR.entry))
 							.forEach(v -> v.setTranscription(transcription.entry));
-				newVoc.ifPresent(vocabula -> {
+				optNewVocabula.ifPresent(vocabula -> {
 					if (!pronunciationURLs.isEmpty()) vocabula.addPronunciations(pronunciationURLs);
 					if (vocabula.getTranscription().isEmpty() && !transcription.entry.isEmpty())
 						vocabula.setTranscription(transcription.entry);
 				});
-				SearchResult partOfSpeechSR = findPartOfSpeech(headWordSR.foundAt);
+				SearchResult partOfSpeechSR = findPartOfSpeechSR(headWordSR.foundAt);
 				if (!partsOfSpeech.contains(partOfSpeechSR.entry)) {
-					//definitions
-					Collection<SearchResult> definitions = findDefinitions(headWordSR, partOfSpeechSR);
+					Collection<SearchResult> definitions = findDefinitionsSR(headWordSR, partOfSpeechSR);
 					if (!definitions.isEmpty()
 									//is derived part of speech
 							    && !partOfSpeechSR.sameOrigin(headWordSR)
 									//is a complex headword or single definition
-							    && (headWordSR.entry.contains(" ") || definitions.size() == 1)
+							    && (headWordSR.entry.contains(" "))
 									//is a cross-reference definition
 							    && (definitions.stream().anyMatch(d -> !d.foundAt.getNodeName().equals("dt")))) {
 						//there are no guaranties about actual part of speech if above is true
 						partOfSpeechSR = new SearchResult(PartOfSpeech.UNDEFINED, partOfSpeechSR.foundAt);
 					}
-					boolean isAForm = (partOfSpeechSR.entry.equals(PartOfSpeech.UNDEFINED)
-							                   && definitions.stream().map(sr -> sr.entry)
-									                      .anyMatch(s -> s.contains(" of ")));
-					boolean isANounForm = isAForm && definitions.stream().map(sr -> sr.entry)
-							                                 .anyMatch(s -> s.contains("plural of "));
-					PartOfSpeech partOfSpeech = isAForm
-							                            ? isANounForm ? language.getPartOfSpeech("noun")
-									                              : language.getPartOfSpeech("verb")
+					// check for "undefined" contraction case
+					if (partOfSpeechSR.entry.equals(PartOfSpeech.UNDEFINED)
+							    && definitions.size() == 1
+							    && definitions.stream().anyMatch(def -> def.entry.contains(PART_OF_SPEECH_CONTRACTION)))
+						partOfSpeechSR = new SearchResult(PART_OF_SPEECH_CONTRACTION, partOfSpeechSR.foundAt);
+					boolean headwordIsAVerbForm = definitions.stream().map(sr -> sr.entry).allMatch(s -> s.contains("tense"));
+					PartOfSpeech partOfSpeech = headwordIsAVerbForm
+							                            ? language.getPartOfSpeech(PART_OF_SPEECH_VERB)
 							                            : new PartOfSpeech(language, partOfSpeechSR.entry);
-					//forms
-					Collection<String> forms;
+					//find known forms
 					if (headWordSR.perfectMatch) {
-						forms = findForms(headWordSR.foundAt);
+						Collection<String> forms = findForms(headWordSR.foundAt);
 						Optional<SearchResult> parentNodeSR = getParentNodeEntry(headWordSR.foundAt);
-						String pattern = format(".*\\b%s|%1$s\\b.*", parentNodeSR.map(sr -> sr.entry).orElse(""));
-						if (forms.isEmpty() && headWordSR.entry.matches(pattern))
+						String startsOrEndsWith = format(".*\\b%s|%1$s\\b.*", parentNodeSR.map(sr -> sr.entry).orElse("#"));
+						// empty forms could mean than the headword is not a simple/single word or it's not a root headword
+						// so we should look up on the parent node's level and mix them
+						if (forms.isEmpty() && headWordSR.entry.matches(startsOrEndsWith))
 							forms = findForms(parentNodeSR.map(sr -> sr.foundAt).orElse(headWordSR.foundAt))
 									        .stream()
 									        .map(kf -> headWordSR.entry.replace(parentNodeSR.map(sr -> sr.entry).orElse(""), kf))
 									        .collect(toList());
-						Collection<String> fForms = forms;
-						if (!forms.isEmpty())
-							newVoc.ifPresent(vocabula -> vocabula.addKnownForms(partOfSpeech, fForms));
+						if (!forms.isEmpty()) {
+							Collection<String> finalForms = forms;
+							optNewVocabula.ifPresent(vocabula -> vocabula.addKnownForms(partOfSpeech, finalForms));
+						}
 					}
-
-					//definitions
+					//process definitions
 					if (!definitions.isEmpty()) {
-						Optional<Vocabula> fNewVoc = newVoc;
+						Vocabula vocabula = optNewVocabula.get();
 						definitions.stream()
-								.map(defSR -> new Object[]{defSR.foundAt,
-										new Definition(language, fNewVoc.get(), partOfSpeech, defSR.entry)})
+								.map(defSR -> new Object[]{defSR.foundAt,	new Definition(language, vocabula, partOfSpeech, defSR.entry)})
 								.forEach(tuple -> {
 									Node searchNode = (Node) tuple[0];
 									Definition definition = (Definition) tuple[1];
 									definition.addSynonyms(findSynonyms(searchNode));
 									definition.addUseCases(findUseCases(searchNode));
-									fNewVoc.get().addDefinition(partOfSpeech, definition);
+									// meaningless definitions not allowed unless it is sole
+									if (definition.explanation.startsWith(FORMS_DEFINITION_PREFIX)
+											    && !vocabula.getDefinitions(partOfSpeech).isEmpty())
+										return;
+									vocabula.addDefinition(partOfSpeech, definition);
 								});
 					}
-					//update list
-					partsOfSpeech.add(isAForm ? partOfSpeech.partName : partOfSpeechSR.entry);
+					//update list of accepted parts of speech
+					partsOfSpeech.add(partOfSpeech.partName);
 				}
 			}
-			newVoc.ifPresent(extracted::add);
+			optNewVocabula.ifPresent(removeUndefinedPOS.andThen(extracted::add));
 			return extracted;
 		} else {
 			collectSuggestions(rootNode);
-			if (acceptSimilar)
+			if (acceptSimilar) {
 				for (String suggestion : recentQuerySuggestions)
-					if (equalIgnoreCaseAndPunct(query, suggestion)) return getVocabula(suggestion, false);
+					if (equalIgnoreCaseAndPunct(query, suggestion))
+						return extractVocabula(suggestion, xmlDoc, false);
+			}
 			return Collections.emptySet();
 		}
 	}
 
-	/*@SuppressWarnings("UnusedAssignment")
-	private void printVocabula(String query, String exactPartOfSpeechName, Document xmlDoc, boolean lookupInSuggestions)
-			throws XPathExpressionException, InterruptedException {
-		XPathFactory xpFactory = XPathFactory.newInstance();
-		xPath = xpFactory.newXPath();
-		Node rootNode = (Node) xPath.evaluate("/entry_list", xmlDoc, NODE);
-		//find headwords
-		Collection<SearchResult> headWords = findEntries(query, rootNode, lookupInSuggestions);
-		String lastHW = "";
-		//retrieve available information for each headword
-		Set<SearchResult> partsOfSpeechSR = null;
-		if (!headWords.isEmpty()) {
-			for (SearchResult headWordSR : headWords) {
-				if (!equalIgnoreCaseAndPunct(lastHW, headWordSR.entry)) {
-					lastHW = headWordSR.entry;
-					Collection<String> pronunciationURLs = findPronunciation(headWordSR);
-					Iterator<String> sIt = pronunciationURLs.iterator();
-					SearchResult transcription = new SearchResult("", null);
-					if (!headWordSR.entry.matches("\\w+(\\s\\w+)+") && headWordSR.perfectMatch) {
-						transcription = findTranscription(headWordSR.foundAt);
-					}
-					System.out.printf("%s [%s]%n", headWordSR.entry, transcription.entry);
-				}
-				partsOfSpeechSR = new LinkedHashSet<>();
-				SearchResult partOfSpeechSR = findPartOfSpeech(headWordSR.foundAt);
-				if (!partsOfSpeechSR.contains(partOfSpeechSR)) {
-					//part of speech
-					partsOfSpeechSR.add(partOfSpeechSR);
-					System.out.printf("  :%s%n", partOfSpeechSR.entry);
-					//forms
-					Collection<String> forms = null;
-					if (headWordSR.perfectMatch && !(forms = findForms(headWordSR.foundAt)).isEmpty())
-						System.out.printf("    forms: %s%n", forms);
-					//definitions
-					Collection<SearchResult> definitions = findDefinitions(headWordSR, partOfSpeechSR);
-					if (!definitions.isEmpty()) {
-						StringBuilder defContent = new StringBuilder();
-						for (SearchResult definitionSR : definitions) {
-							if (forms != null)
-								defContent.append("    - ").append(definitionSR.entry).append("\n");
-							//synonyms
-							Collection<String> synonyms;
-							synonyms = findSynonyms(definitionSR.foundAt);
-							int defLen;
-							if (!synonyms.isEmpty())
-								defContent.append("    synonyms: ")
-										.append(synonyms.stream().collect(joining(", "))).append("\n");
-							//usage cases
-							Collection<String> useCases = findUseCases(definitionSR.foundAt);
-							if (!useCases.isEmpty())
-								defContent.append("      : ")
-										.append(useCases.stream().collect(joining("\n        "))).append("\n");
-							System.out.print(defContent.toString());
-							defContent.delete(0, defContent.length());
-						}
-					}
-				}
-			}
-		} else {
-			collectSuggestions(rootNode);
-			System.out.printf("No definition for \"%s\"%nMaybe %s?%n", query, recentQuerySuggestions);
-		}
-	}*/
-
-	public Collection<String> getRecentSuggestions() {
-		return Collections.unmodifiableCollection(recentQuerySuggestions);
+	public Set<String> getRecentSuggestions() {
+		return Collections.unmodifiableSet(recentQuerySuggestions);
 	}
 
-	public Collection<SearchResult> findEntries(String query, Node rootNode, boolean acceptSimilar)
+	private Set<SearchResult> findEntriesSR(String query, Node rootNode, boolean acceptSimilar)
 			throws XPathExpressionException {
 		String[] entryNodeTags = {"ew", "hw", "in/if", "dro/dre", "dro/vr/va", "dro/drp", "uro/ure", "uro/vr/va"};
 		String queryLC = query.toLowerCase();
@@ -354,8 +304,6 @@ public class Expositor {
 					                                 .sorted(hasDefinitionFirst).findFirst();
 			entrySR.ifPresent(entriesSR::add);
 		}
-		recentQuerySuggestions.addAll(similarsSR.stream().map(sr -> sr.entry).collect(toList()));
-		recentQuerySuggestions.addAll(entriesSR.stream().map(sr -> sr.entry).collect(toList()));
 		return entriesSR;
 	}
 
@@ -367,7 +315,7 @@ public class Expositor {
 		return node;
 	}
 
-	public SearchResult findTranscription(Node rootNode) throws XPathExpressionException {
+	private SearchResult findTranscriptionSR(Node rootNode) throws XPathExpressionException {
 		String[] transcriptionTags = {"pr", "vr/pr", "altpr"};
 		String transcription = "";
 		Node node = rootNode;
@@ -384,12 +332,12 @@ public class Expositor {
 		return new SearchResult(transcription, node);
 	}
 
-	private Collection<String> findPronunciation(SearchResult headWord) throws XPathExpressionException {
-		if (!headWord.perfectMatch) return Collections.emptySet();
+	private List<String> findPronunciation(SearchResult headWord) throws XPathExpressionException {
+		if (!headWord.perfectMatch) return Collections.emptyList();
 		NodeList nodes = (NodeList) xPath.evaluate("sound/wav", headWord.foundAt, NODESET);
 		int nNodes = nodes.getLength();
-		if (nNodes == 0) return Collections.emptySet();
-		Collection<String> sounds = new ArrayList<>();
+		if (nNodes == 0) return Collections.emptyList();
+		List<String> sounds = new ArrayList<>();
 		String urlFmt = "http://media.merriam-webster.com/soundc11/%s/%s";
 		for (int i = 0; i < nNodes; i++) {
 			String fileName = nodes.item(i).getTextContent();
@@ -402,7 +350,7 @@ public class Expositor {
 		return sounds;
 	}
 
-	public SearchResult findPartOfSpeech(Node rootNode) throws XPathExpressionException {
+	private SearchResult findPartOfSpeechSR(Node rootNode) throws XPathExpressionException {
 		String partOfSpeechName;
 		Node node = rootNode;
 		String[] pOSTags = {"fl", "gram"};
@@ -415,17 +363,14 @@ public class Expositor {
 			node = node.getParentNode();
 		if (partOfSpeechName.isEmpty()) {
 			if (node == null) node = rootNode;
-			//partOfSpeechName = xPath.evaluate("gram", node);
-			//if (!partOfSpeechName.isEmpty()) return new SearchResult(partOfSpeechName, node);
 			partOfSpeechName = PartOfSpeech.UNDEFINED;
 		}
-//		partOfSpeechName = PartOfSpeech.UNDEFINED;
 		return new SearchResult(partOfSpeechName, node);
 	}
 
-	private Collection<String> findForms(Node node) throws XPathExpressionException {
-		String[] entryNodeTags = {"in/if"/*, "gram"*/};
-		Collection<String> knownForms = new ArrayList<>();
+	private List<String> findForms(Node node) throws XPathExpressionException {
+		String[] entryNodeTags = {"in/if", "cx/ct"};
+		List<String> knownForms = new ArrayList<>();
 		for (String entryNode : entryNodeTags) {
 			String expression = format("%s", entryNode);
 			NodeList formsList = (NodeList) xPath.evaluate(expression, node, NODESET);
@@ -436,10 +381,10 @@ public class Expositor {
 		return knownForms;
 	}
 
-	private Collection<SearchResult> findFormsSR(Node node) throws XPathExpressionException {
-		String[] entryNodeTags = {"in/if"/*, "gram"*/};
-		Collection<SearchResult> knownForms = new ArrayList<>();
-		for (String entryNode : entryNodeTags) {
+	private List<SearchResult> findFormsSR(Node node) throws XPathExpressionException {
+		String[] formNodeTags = {"in/if", "cx/ct"};
+		List<SearchResult> knownForms = new ArrayList<>();
+		for (String entryNode : formNodeTags) {
 			String expression = format("%s", entryNode);
 			NodeList formsList = (NodeList) xPath.evaluate(expression, node, NODESET);
 			for (int i = 0; i < formsList.getLength(); i++) {
@@ -454,13 +399,23 @@ public class Expositor {
 	private boolean isAFormOf(SearchResult headWord, SearchResult parentNodeEntry, SearchResult partOfSpeech)
 			throws XPathExpressionException {
 		return findForms(parentNodeEntry.foundAt).contains(headWord.entry)
-				       && findPartOfSpeech(parentNodeEntry.foundAt).entry.equals(partOfSpeech.entry);
+				       && findPartOfSpeechSR(parentNodeEntry.foundAt).entry.equals(partOfSpeech.entry);
 	}
-
-	public Collection<SearchResult> findDefinitions(SearchResult headWordSR, SearchResult partOfSpeech)
+	
+	private String getKindOfForm(SearchResult parentNodeEntry) throws XPathExpressionException {
+		String[] formKindNodeTags = {"in/il", "cx/cl"};
+		String kindOfForm = "";
+		for (String formKindTag : formKindNodeTags) {
+			kindOfForm = xPath.evaluate(formKindTag, parentNodeEntry.foundAt);
+			if (!kindOfForm.isEmpty()) break;
+		}
+		return kindOfForm.isEmpty() ? FORMS_DEFINITION_PREFIX : kindOfForm;
+	}
+	
+	private Set<SearchResult> findDefinitionsSR(SearchResult headWordSR, SearchResult partOfSpeech)
 			throws XPathExpressionException {
-		String[] definitionTags = {"def/dt", "def/dt/snote"/*, "def/dt/un"*/};
-		Collection<SearchResult> definitionsSR = new LinkedHashSet<>();
+		String[] definitionTags = {"cx", "def/dt", "def/dt/snote"};
+		Set<SearchResult> definitionsSR = new LinkedHashSet<>();
 		String definition;
 		StringBuilder defBuilder = new StringBuilder();
 		for (String tag : definitionTags) {
@@ -472,7 +427,6 @@ public class Expositor {
 					Node currNode = defNodes.item(i).getFirstChild();
 					String definitionContents = extractNodeContents(defNodes.item(i)).replaceAll("</b> <b>", "</b>, <b>");
 					String[] definitions = definitionContents.split(":");
-					boolean closeParenthesis = false;
 					for (int j = 0, first = 0; j < definitions.length; j++) {
 						boolean emptyDefinition = definitions[j].trim().isEmpty();
 						if (emptyDefinition) {
@@ -487,9 +441,8 @@ public class Expositor {
 					if (!usageNote.entry.isEmpty()) {
 						if (defBuilder.length() != 0) defBuilder.append(" - ");
 						defBuilder.append(usageNote.entry);
-						//useCasesRoot = usageNote.foundAt;
 					}
-					definition = splitBTag(defBuilder.toString());
+					definition = decomposeBTag(defBuilder.toString());
 					if (!definition.isEmpty()) {
 						definitionsSR.add(new SearchResult(definition.trim(), useCasesRoot));
 					} else {
@@ -501,43 +454,44 @@ public class Expositor {
 						}
 					}
 					// look for a reference at definition section
-					if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluate("dx", defNodes.item(i)));
+					if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluateNode("dx", defNodes.item(i)));
 				}
 		}
-		// look for synonym
-		if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluate("cx", headWordSR.foundAt));
 		// look for a reference at entry section
-		if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluate("dx", headWordSR.foundAt));
-
+		if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluateNode("dx", headWordSR.foundAt));
+		// compose definition as a reference to parent node's headword
 		if (definitionsSR.isEmpty()) {
 			Optional<SearchResult> parentNodeEntryOSR = getParentNodeEntry(headWordSR.foundAt);
 			if (parentNodeEntryOSR.isPresent()) {
 				SearchResult parentNodeEntry = parentNodeEntryOSR.get();
-				String definitionPrefix = isAFormOf(headWordSR, parentNodeEntry, partOfSpeech) ? "form of" : "see";
+				String definitionPrefix = isAFormOf(headWordSR, parentNodeEntry, partOfSpeech)
+						                          ? getKindOfForm(parentNodeEntry)
+						                          : "see";
 				Node foundAt = headWordSR.sameOrigin(partOfSpeech)
 						               ? headWordSR.foundAt
 						               : partOfSpeech.foundAt;
 				definition = defBuilder.append(format("%s <b>", definitionPrefix))
 						             .append(parentNodeEntry.entry).append("</b>").toString();
 				if (foundAt == headWordSR.foundAt) {
-					definition = definition.concat(format(" [: %s]", findPartOfSpeech(parentNodeEntry.foundAt).entry));
+					definition = definition.concat(format(" [: %s]", findPartOfSpeechSR(parentNodeEntry.foundAt).entry));
 				}
 				definitionsSR.add(new SearchResult(definition, foundAt));
 			}
 		}
 		return definitionsSR;
 	}
-
-	private Collection<SearchResult> evaluate(String nodeToEval, Node root)
+	
+	// evaluate particular sub-node of the given node
+	private List<SearchResult> evaluateNode(String nodeToEval, Node root)
 			throws XPathExpressionException {
-		Collection<SearchResult> result = new ArrayList<>();
+		List<SearchResult> result = new ArrayList<>();
 		Optional<Node> evalNode = Optional.ofNullable((Node) xPath.evaluate(nodeToEval, root, NODE));
 		evalNode.ifPresent(node -> result.add(new SearchResult(extractNodeContents(node), node)));
 		return result;
 	}
 
-	public Collection<String> findSynonyms(Node rootNode) {
-		Collection<String> synonyms = new ArrayList<>();
+	private Set<String> findSynonyms(Node rootNode) {
+		Set<String> synonyms = new HashSet<>();
 		try {
 			NodeList synNodes = (NodeList) xPath.evaluate("sx", rootNode, NODESET);
 			int nNodes = synNodes.getLength();
@@ -551,24 +505,26 @@ public class Expositor {
 		return synonyms;
 	}
 
-	public Collection<String> findUseCases(Node rootNode) {
+	private Set<String> findUseCases(Node rootNode) {
 		String[] useCasesTags = {"vi", "un/vi", "snote/vi", "utxt/vi"};
-		Collection<String> useCases = new ArrayList<>();
+		Set<String> useCases = new HashSet<>();
 		for (String useCasesTag : useCasesTags)
 			try {
-				NodeList nodes = (NodeList) xPath.evaluate(useCasesTag, rootNode, NODESET);
-				IntStream.range(0, nodes.getLength())
-						.mapToObj(i -> extractNodeContents(nodes.item(i)))
+				NodeList ucNodes = (NodeList) xPath.evaluate(useCasesTag, rootNode, NODESET);
+				IntStream.range(0, ucNodes.getLength())
+						.mapToObj(i -> extractNodeContents(ucNodes.item(i)))
 						.filter(Strings::notBlank)
-						.map(this::splitBTag)
+						.map(this::decomposeBTag)
 						.forEach(useCases::add);
 			} catch (XPathExpressionException e) {
 				e.printStackTrace();
 			}
 		return useCases;
 	}
-
-	private String splitBTag(String source) {
+	
+	// transform collocation embraced in <b>...</b> into separate "<b>"-embraced tokens,
+	// e.g. "<b>tok1, tok2, tok3</b>" -> "<b>tok1</b>, <b>tok2</b>, <b>tok3</b>"
+	private String decomposeBTag(String source) {
 		if (!source.matches(".*<b>.*")) return source;
 		String result = source;
 		Matcher matcher = Pattern.compile("(<b>[^<>]+(, [^<>]+)*</b>)").matcher(source);
@@ -630,7 +586,7 @@ public class Expositor {
 					content.append(child.getTextContent());
 			}
 		}
-		return content.toString().replace(String.valueOf((char) 8211), "-").replace("*", "");
+		return content.toString().replace(DASH, HYPHEN).replace(ASTERISK, "");
 	}
 
 	private Optional<SearchResult> getParentNodeEntry(Node rootNode) throws XPathExpressionException {
@@ -662,13 +618,15 @@ public class Expositor {
 				if (nDefinitions > 0) return true;
 			}
 		} catch (XPathExpressionException e) {
+			//NOP
 		}
 		return false;
 	}
-
-	public void collectSuggestions(Node sourceNode) throws XPathExpressionException {
-		String[] pathsToCollect = {"suggestion", "entry/hw", "entry/ew", "entry/dro/dre", "entry/uro/ure", "entry/cx/ct"};
-		Collection<String> strSuggestions = new ArrayList<>();
+	
+	// collect available headwords of the document in case we couldn't find any match
+	private void collectSuggestions(Node sourceNode) throws XPathExpressionException {
+		String[] pathsToCollect = {"suggestion", "entry/hw", "entry/ew", "entry/dro/dre", "entry/uro/ure", "entry/cx/ct", "entry/in/if"};
+		Set<String> strSuggestions = new LinkedHashSet<>();
 		for (String sourcePath : pathsToCollect) {
 			NodeList suggestions = (NodeList) xPath.evaluate(sourcePath, sourceNode, NODESET);
 			for (int i = 0; i < suggestions.getLength(); i++)
@@ -703,12 +661,14 @@ public class Expositor {
 		String matchLC = match.toLowerCase().replaceFirst("[^\\p{L}]", "").replace(" ", "");
 		return comparedLC.contains(matchLC);
 	}
-
+	
+	@SuppressWarnings("unused")
 	private boolean appropriatePartOfSpeech(String partOfSpeechName, String exactPartOfSpeechName) {
 		return !language.getPartOfSpeech(partOfSpeechName).partName.equals(PartOfSpeech.UNDEFINED)
 				       && (exactPartOfSpeechName.equals(PartOfSpeech.ANY) || partOfSpeechName.equals(exactPartOfSpeechName));
 	}
 
+	@SuppressWarnings("unused")
 	private Node getRootNode(Node definitionNode) {
 		Node node = definitionNode.getParentNode();
 		while (node.getParentNode().getParentNode() != null)
@@ -716,6 +676,7 @@ public class Expositor {
 		return node;
 	}
 
+	@SuppressWarnings("unused")
 	public String getRawContents(URL uRequest) {
 		StringBuilder res = new StringBuilder();
 		String line;

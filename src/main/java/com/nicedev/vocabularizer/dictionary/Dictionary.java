@@ -38,7 +38,7 @@ public class Dictionary implements Serializable{
 	
 	public static Optional<Dictionary> load(String langName, String path) {
 		Dictionary dictionary = null;
-		try (ObjectInput in = new ObjectInputStream(new GZIPInputStream(new FileInputStream(path)))) {
+		try (ObjectInput in = new ObjectInputStream(new GZIPInputStream(new FileInputStream(path), 1024*1024))) {
 			dictionary = (Dictionary) in.readObject();
 			if (!dictionary.language.langName.equalsIgnoreCase(langName))
 				throw new IllegalArgumentException(String.format("Invalid target language: looking %s found %s",
@@ -53,7 +53,7 @@ public class Dictionary implements Serializable{
 	}
 	
 	public static boolean save(Dictionary dict, String path) {
-		try (ObjectOutput out = new ObjectOutputStream(new GZIPOutputStream(new FileOutputStream(path)))) {
+		try (ObjectOutput out = new ObjectOutputStream(new GZIPOutputStream(new FileOutputStream(path), 1024*1024))) {
 			out.writeObject(dict);
 			return true;
 		} catch (IOException e) {
@@ -113,7 +113,8 @@ public class Dictionary implements Serializable{
 //        vocabula.mapPOS.putIfAbsent(pOS,defs);
 //        articles.putIfAbsent(newEntry, vocabula);
 //        updateStatistics();
-//        return true;
+//	    return true;
+//    }
 
 	public boolean addPartOfSpeech(String newEntry, String partOfSpeechName) {
 		return addDefinition(newEntry, partOfSpeechName, newEntry);
@@ -124,17 +125,18 @@ public class Dictionary implements Serializable{
 	}
 	
 	public boolean addPartsOfSpeech(Vocabula newVoc) {
-		Optional<Vocabula> vocabula = ofNullable(articles.get(newVoc.headWord));
-		vocabula.ifPresent(voc -> {
+		Optional<Vocabula> optVocabula = ofNullable(articles.get(newVoc.headWord));
+		optVocabula.ifPresent(availableVoc -> {
 			newVoc.getPartsOfSpeech().stream()
-					.filter(pOS -> !voc.getPartsOfSpeech().contains(pOS) || !voc.hasDecentDefinition(pOS))
+					.filter(pOS -> !availableVoc.getPartsOfSpeech().contains(pOS) || !availableVoc.hasDecentDefinition(pOS))
 					.forEach(pOS -> {
 						addKnownForms(newVoc.headWord, pOS.partName, newVoc.getKnownForms(pOS));
 						addDefinitions(newVoc.headWord, pOS.partName, newVoc.getDefinitions(pOS));
 					});
-			if (voc.getTranscription().isEmpty()) voc.setTranscription(newVoc.getTranscription());
+			if (availableVoc.getPartsOfSpeech().size() > 1) availableVoc.removePartOfSpeech(PartOfSpeech.UNDEFINED);
+			if (availableVoc.getTranscription().isEmpty()) availableVoc.setTranscription(newVoc.getTranscription());
 		});
-		if (!vocabula.isPresent()) articles.put(newVoc.headWord, newVoc);
+		if (!optVocabula.isPresent()) articles.put(newVoc.headWord, newVoc);
 		updateStatistics();
 		return true;
 	}
