@@ -1,5 +1,6 @@
 package com.nicedev.vocabularizer;
 
+import com.nicedev.util.Combinatorics;
 import com.nicedev.util.Maps;
 import com.nicedev.util.QueuedCache;
 import com.nicedev.util.Strings;
@@ -63,7 +64,6 @@ import static com.nicedev.util.SimpleLog.log;
 import static com.nicedev.util.Streams.getStream;
 import static com.nicedev.util.Strings.getValidPattern;
 import static java.lang.Math.max;
-import static java.lang.String.format;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.nio.file.StandardOpenOption.CREATE;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
@@ -76,11 +76,6 @@ import static javafx.scene.input.KeyCode.SPACE;
 
 public class GUIController implements Initializable {
 	
-	private final int LIST_FILTERING_DELAY = 500;
-	private final int INPUT_FILTERING_DELAY = 400;
-	private final int PRONUNCIATION_DELAY = 500;
-	private final int RECENT_QUERIES_TO_LOAD = 150;
-	private final String ALL_MATCH = "";
 	@FXML
 	public ToggleButton toggleSimilar;
 	@FXML
@@ -106,23 +101,31 @@ public class GUIController implements Initializable {
 	@FXML
 	private WebTabPane tabPane;
 	
-	private static final int FILTER_DELAY = 500;
-	private static final boolean ALLOW_PARALLEL_STREAM = Boolean.valueOf(System.getProperty("allowParallelStream", "false"));
-	private static final int INDEXING_ALGO = Integer.valueOf(System.getProperty("indexingAlgo", "0"));
-	private static final int FILTER_CACHE_SIZE = Integer.valueOf(System.getProperty("fcSize", "25"));
-	private static final Label NOTHING_FOUND = new Label("Nothing found");
-	private static final Label NO_MATCH = new Label("No matches");
-	private static final Label SEARCHING = new Label("Searching...");
+	private final Label NOTHING_FOUND = new Label("Nothing found");
+	private final Label NO_MATCH = new Label("No matches");
+	private final Label SEARCHING = new Label("Searching...");
+	
+	private final String COMPARING_DELIMITER = " | ";
+	private final int LIST_FILTERING_DELAY = 500;
+	private final int INPUT_FILTERING_DELAY = 400;
+	private final int PRONUNCIATION_DELAY = 500;
+	private final int RECENT_QUERIES_TO_LOAD = 150;
+	private final String ALL_MATCH = "";
+	private final int FILTER_DELAY = 500;
+	private final boolean ALLOW_PARALLEL_STREAM = Boolean.valueOf(System.getProperty("allowParallelStream", "false"));
+	private final int INDEXING_ALGO = Integer.valueOf(System.getProperty("indexingAlgo", "0"));
+	private final int FILTER_CACHE_SIZE = Integer.valueOf(System.getProperty("fcSize", "25"));
 	private final String WH_REQUEST_URL = "http://wooordhunt.ru/word/%s";
 	private final String GT_REQUEST_URL = "https://translate.google.com/#%s/%s/%s";
-	private static final String HOME_PATH = System.getProperties().getProperty("user.home");
+	private final String HOME_PATH = System.getProperties().getProperty("user.home");
 	private final String HISTORY_FILENAME = "vocabularizer.history";
 	private final String cssHref;
 	private final String jsHref;
-	private static String storageEn = format("%s\\%s.dict", HOME_PATH, "english");
+	private final String storageEn = String.format("%s\\%s.dict", HOME_PATH, "english");
+	
+	private Scene mainScene;
 	private String localLanguage;
 	private String foreignLanguage;
-	private Scene mainScene;
 	private int updateCount = 0;
 	private PronouncingService pronouncingService;
 	private Expositor[] expositors;
@@ -295,8 +298,6 @@ public class GUIController implements Initializable {
 		log("stop: canceling delayed filtering");
 		queryBoxFiltering.cancel();
 		tableItemFiltering.cancel();
-//		log("stop: terminating scheduler");
-//		scheduler.shutdownNow();
 		log("stop: terminating executor");
 		executor.shutdownNow();
 		log("stop: clearing pronouncingService");
@@ -343,7 +344,6 @@ public class GUIController implements Initializable {
 		synchronized (tabPane) {
 			filterOn = tabPane.getSelectedTabIndex() == 0;
 			String caption = filterOn ? newValue.getText() : newValue.getTooltip().getText();
-			log("TSL: updateQueryField(%s,%s)", caption, false);
 			updateQueryField(caption, false);
 		}
 		Platform.runLater(() -> {
@@ -361,7 +361,6 @@ public class GUIController implements Initializable {
 			queryBox.editorProperty().get().positionCaret(caretPos);
 		} else caretPos = queryBox.editorProperty().get().getCaretPosition();
 		filterOn = newValue || tabPane.getSelectedTabIndex() == 0;
-		log("qbfc: caretPos == %d", caretPos);
 	};
 	
 	private ChangeListener<Boolean> queryBoxShowingChangeListener = (observable, oldValue, newValue) -> {
@@ -369,7 +368,6 @@ public class GUIController implements Initializable {
 	};
 	
 	private ChangeListener<String> queryBoxValueChangeListener = (observable, oldValue, newValue) -> {
-		log("queryBoxValueChangeListener: filterOn==%s, value==%s", filterOn, newValue);
 		if (filterOn) {
 			try {
 				if (queryBox.isShowing()) {
@@ -378,6 +376,9 @@ public class GUIController implements Initializable {
 					mainTab.setText(newValue);
 					ofNullable(newValue).ifPresent(val -> engageFiltering(val, INPUT_FILTERING_DELAY));
 					updateTableState(false);
+					// auto enabling/disabling RE mode to simplify selection of words to compare
+					if (!toggleRE.isSelected() || queryBoxValue.get().isEmpty())
+						toggleRE.setSelected(queryBoxValue.get().contains("|"));
 				}
 			} catch (Exception e) {
 				log("queryBoxLisener: unexpected exception - %s | %s", e.getMessage(), e.getCause().getMessage());
@@ -419,7 +420,6 @@ public class GUIController implements Initializable {
 	
 	@FXML
 	protected void onTableMousePressed(@SuppressWarnings("unused") MouseEvent event) {
-		log("onTableMousePressed");
 		engageTableSelectedItemFiltering();
 		int selectedIndex = hwTable.getSelectionModel().getSelectedIndex();
 		if (selectedIndex != -1) {
@@ -595,7 +595,6 @@ public class GUIController implements Initializable {
 	
 	@FXML
 	protected void onMouseClicked(MouseEvent event) {
-		log("onMouseClicked");
 		ctrlIsDown = event.isControlDown();
 		if (event.getButton().equals(MouseButton.PRIMARY) && event.getClickCount() == 2) {
 			if (tabPane.getActiveTab() instanceof TranslationTab) return;
@@ -635,16 +634,15 @@ public class GUIController implements Initializable {
 	 ************************************/
 	
 	private String composeRE(String text) {
-		//log("composeRE: composed==%s", composed);
-		return (!toggleRE.isSelected()) ? Stream.of(text.split("(?=\\p{Punct})"))
-				                                  .map(s -> (s.matches("\\p{Punct}.*")) ? "\\".concat(s) : s)
-				                                  .collect(joining())
+		return (!toggleRE.isSelected())
+				       ? Stream.of(text.split("(?=\\p{Punct})"))
+						         .map(s -> (s.matches("\\p{Punct}.*")) ? "\\".concat(s) : s)
+						         .collect(joining())
 				       : text;
 	}
 	
 	private void rebuildIndex() {
 		executor.submit(() -> {
-//			log("rebuildIndex: start");
 			indexer.cancel(true);
 			indexer = executor.submit(() -> {
 //				log("rebuildIndex: scheduled");
@@ -659,7 +657,6 @@ public class GUIController implements Initializable {
 				if (indexer.get()) {
 					resetCache();
 					updateTableState(false);
-//					log("rebuildIndex: Done");
 				}
 			} catch (InterruptedException e) {
 				log("Interrupted while retrieving index");
@@ -678,16 +675,12 @@ public class GUIController implements Initializable {
 	}
 	
 	private Map<String, Collection<String>> getIndex(Collection<Vocabula> vocabulas, int indexingAlgo) {
-		//log("chosen algo %d", indexingAlgo);
-		//long start = System.currentTimeMillis();
 		Map<String, Collection<String>> res;
 		switch (indexingAlgo) {
 			case 2 : res = getIndex2(vocabulas); break;
 			case 3 : res = getIndex3(vocabulas); break;
 			default: res = getIndex1(vocabulas);
 		}
-		//log("built index in %f (allowParallelStream==%s, indexingAlgo==%d",
-		//	(System.currentTimeMillis() - start) / 1000f, ALLOW_PARALLEL_STREAM, indexingAlgo);
 		return  res;
 	}
 	
@@ -733,7 +726,6 @@ public class GUIController implements Initializable {
 			filterCache.clear();
 			filterCache.putPersistent(filterList(ALL_MATCH));
 			try {
-//				log("resetCache: queryBoxValue==\"%s\"", queryBoxValue.getValue());
 				ofNullable(mainTab.getText()).filter(String::isEmpty).ifPresent(val -> hwData.setAll(filterList(val)));
 			} catch (Exception e) {
 				log("reset cache: unexpected exception - %s | %s", e.getMessage(), e.getCause().getMessage());
@@ -755,7 +747,6 @@ public class GUIController implements Initializable {
 	
 	private void engageTableSelectedItemFiltering() {
 		try {
-			log("engageTableSelectedItemFiltering");
 			if (selectedHWItems.isEmpty()) return;
 			String selection = selectedHWItems.size() > 0
 					                   ? hwTable.getSelectionModel().getSelectedItem()
@@ -803,27 +794,43 @@ public class GUIController implements Initializable {
 	};
 	
 	private Function<String, WebViewTab> expositorTabSupplier = (title) -> {
-		WebViewTab newTab = new ExpositorTab(title, dictionary.getVocabula(title));
-		//"update tab at first sight" flag
-		newTab.setUserData(Boolean.TRUE);
-		newTab.selectedProperty().addListener((observable, oldValue, newValue) -> Platform.runLater(() -> {
-			if ((Boolean) newTab.getUserData() && newValue) {
-				Optional<Vocabula> optVocabula = getAssignedVocabula(newTab);
-				String headWord = optVocabula.map(voc -> voc.headWord).orElse(title);
-//				log("ETS: updateQueryField(%s,%s)", headWord, false);
-//				updateQueryField(headWord, false);
-				if (!optVocabula.isPresent()) {
-					handleQuery(headWord);
-//					log("ETS: updateQueryField(%s,%s)", headWord, false);
-					updateQueryField(headWord, false);
-				} else {
-					log("tabSelectedChangeListener: updateView for \"%s\"", optVocabula.get().headWord);
-					updateView(optVocabula.get().toHTML());
-					pronounce(optVocabula.get());
+		WebViewTab newTab;
+		if (!title.contains(COMPARING_DELIMITER)) {
+			newTab = new ExpositorTab(title, dictionary.getVocabula(title));
+			// "update tab at first sight" flag
+			newTab.setUserData(Boolean.TRUE);
+			newTab.selectedProperty().addListener((observable, oldValue, newValue) -> Platform.runLater(() -> {
+				if ((Boolean) newTab.getUserData() && newValue) {
+					Optional<Vocabula> optVocabula = getAssignedVocabula(newTab);
+					String headWord = optVocabula.map(voc -> voc.headWord).orElse(title);
+					if (!optVocabula.isPresent()) {
+						handleQuery(headWord);
+						updateQueryField(headWord, false);
+					} else {
+						updateView(optVocabula.get().toHTML());
+						pronounce(optVocabula.get());
+					}
+					newTab.setUserData(Boolean.FALSE);
 				}
-				newTab.setUserData(Boolean.FALSE);
-			}
-		}));
+			}));
+		} else {
+			newTab = new ExpositorTab(title, null);
+			newTab.setUserData(Boolean.TRUE);
+			newTab.selectedProperty().addListener((observable, oldValue, newValue) -> Platform.runLater(() -> {
+				if ((Boolean) newTab.getUserData() && newValue) {
+					String[] headwords = title.split(Strings.escapeRegEx(COMPARING_DELIMITER, "|"));
+					Collection<Vocabula> compared = Arrays.stream(headwords)
+							                                .map(dictionary::getVocabula)
+							                                .filter(Optional::isPresent)
+							                                .map(Optional::get)
+							                                .collect(toList());
+					String comparing = compared.stream().map(Vocabula::toHTML).collect(joining("</td><td width='50%'>"));
+					String content = String.format("<table><tr><td width='50%%'>%s</td></tr></table>", comparing);
+					updateView(content);
+					newTab.setUserData(Boolean.FALSE);
+				}
+			}));
+		}
 		newTab.addHandlers(viewHndlrsSetter);
 		return newTab;
 	};
@@ -831,6 +838,11 @@ public class GUIController implements Initializable {
 	@SuppressWarnings("unchecked")
 	private Optional<Vocabula> getAssignedVocabula(Tab newTab) {
 		Optional<Optional<Vocabula>> userData = ofNullable((Optional<Vocabula>) newTab.getContent().getUserData());
+		return userData.filter(Optional::isPresent).map(Optional::get);
+	}
+	
+	private Optional<List<Vocabula>> getAssignedVocabulas(Tab newTab) {
+		Optional<Optional<List<Vocabula>>> userData = ofNullable((Optional<List<Vocabula>>) newTab.getContent().getUserData());
 		return userData.filter(Optional::isPresent).map(Optional::get);
 	}
 	
@@ -847,10 +859,8 @@ public class GUIController implements Initializable {
 	}
 	
 	private void updateQueryField(String text, boolean filterActive) {
-//		log("updateQueryField(%s, %s)", text, filterActive);
 		boolean filterState = filterOn;
 		filterOn = filterActive;
-//			log("updateQueryField: filterOn==%s)", filterOn);
 		if (filterActive) {
 			if (tabPane.getSelectedTabIndex() > 0) tabPane.selectTab(mainTab);
 			if (relevantSelectionOwner != queryBox) queryBox.requestFocus();
@@ -890,16 +900,24 @@ public class GUIController implements Initializable {
 		EventHandler<ActionEvent> handleQueryEH = this::onSearch;
 		GUIUtil.addMenuItem("Explain", handleQueryEH, contextMenu);
 		
-		Function<String, String> requestFormatterGT = s -> format(GT_REQUEST_URL, foreignLanguage, localLanguage, s);
-		EventHandler<ActionEvent> showGTTranslationEH = e -> showTranslation(context, requestFormatterGT);
-		
-		Function<String, String> requestFormatterWH = s -> format(WH_REQUEST_URL, s);
-		EventHandler<ActionEvent> showWHTranslationEH = e -> showTranslation(context, requestFormatterWH);
-		
-		Menu translations = new Menu("Translate");
-		GUIUtil.addMenuItem(" via Google", showGTTranslationEH, translations);
-		GUIUtil.addMenuItem(" via WooordHunt", showWHTranslationEH, translations);
-		GUIUtil.addMenuItem(translations, contextMenu);
+		// headwords comparing available only from tableView
+		if (contextMenu instanceof ContextMenu) {
+			EventHandler<ActionEvent> compareHeadwordsEH = e -> compareHeadwords(context);
+			GUIUtil.addMenuItem("Compare", compareHeadwordsEH, contextMenu);
+		}
+		// default translation behavior is not available in compare mode
+		if (!context.filter(s -> s.contains("|")).isPresent()) {
+			Function<String, String> requestFormatterGT = s -> String.format(GT_REQUEST_URL, foreignLanguage, localLanguage, s);
+			EventHandler<ActionEvent> showGTTranslationEH = e -> showTranslation(context, requestFormatterGT);
+			
+			Function<String, String> requestFormatterWH = s -> String.format(WH_REQUEST_URL, s);
+			EventHandler<ActionEvent> showWHTranslationEH = e -> showTranslation(context, requestFormatterWH);
+			
+			Menu translations = new Menu("Translate");
+			GUIUtil.addMenuItem(" via Google", showGTTranslationEH, translations);
+			GUIUtil.addMenuItem(" via WooordHunt", showWHTranslationEH, translations);
+			GUIUtil.addMenuItem(translations, contextMenu);
+		}
 		
 		EventHandler<ActionEvent> pronounceEH = e -> pronounce(context);
 		GUIUtil.addMenuItem("Pronounce", pronounceEH, contextMenu);
@@ -908,6 +926,19 @@ public class GUIController implements Initializable {
 		
 		EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadword(context);
 		GUIUtil.addMenuItem("Delete headword", deleteHeadwordEH, contextMenu);
+	}
+	
+	private void compareHeadwords(Optional<String> context) {
+			if (relevantSelectionOwner == hwTable) {
+				List<String> comparingPairs;
+				if (selectedHWItems.size() > 2)
+					comparingPairs = Combinatorics.getUniqueCombinations(selectedHWItems, 2).stream()
+							                  .map(strings -> strings.stream().collect(joining(COMPARING_DELIMITER)))
+							                  .collect(toList());
+				else
+					comparingPairs = Collections.singletonList(selectedHWItems.stream().collect(joining(COMPARING_DELIMITER)));
+				tabPane.insertIfAbsent(comparingPairs, expositorTabSupplier, ExpositorTab.class);
+			}
 	}
 	
 	private void showTranslation(Optional<String> textToTranslate, Function<String, String> requestFormatter) {
@@ -1110,7 +1141,7 @@ public class GUIController implements Initializable {
 	}
 	
 	private String getDeleteMsg(int count) {
-		return format("You're about to delete %d headword%s. Continue?", count, count > 1 ? "s" : "");
+		return String.format("You're about to delete %d headword%s. Continue?", count, count > 1 ? "s" : "");
 	}
 	
 	private void updateStatistics(boolean invalidateIndex) {
@@ -1164,17 +1195,15 @@ public class GUIController implements Initializable {
 	
 	private void updateView(String body) {
 		if (body.isEmpty()) {
-			log("updateView: body is empty");
 			tabPane.getActiveEngine().ifPresent(engine -> engine.loadContent(""));
 			return;
 		}
 		tabPane.getActiveEngine().ifPresent(engine -> {
-			log("updateView: body is present");
 			setSceneCursor(Cursor.WAIT);
 			String fmt = "<html>\n<head>\n<link rel='stylesheet' href='%s'/>" +
 					             "<script src='%s'></script>" +
 					             "</head>\n<body>\n%s</body>\n</html>";
-			String htmlContent = format(fmt, cssHref, jsHref, enableAnchors(body));
+			String htmlContent = String.format(fmt, cssHref, jsHref, enableAnchors(body));
 			engine.loadContent(htmlContent);
 			tabPane.getActiveTab().getContent().requestFocus();
 		});
@@ -1270,7 +1299,7 @@ public class GUIController implements Initializable {
 		Set<String> separateHWs = HWs.stream()
 				                          .filter(s -> !s.matches("\\p{Punct}}"))
 				                          .flatMap(s -> Stream.of(s.split("[,.:;'/()\\s\\\\]"))
-						                                        .filter(Strings.notBlank)
+						                                        .filter(Strings.NOT_BLANK)
 						                                        .filter(sp -> !sp.matches("\\p{Punct}"))
 						                                        .distinct())
 				                          .collect(toSet());

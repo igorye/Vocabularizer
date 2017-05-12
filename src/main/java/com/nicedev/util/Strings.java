@@ -3,17 +3,19 @@ package com.nicedev.util;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import java.util.stream.Stream;
 
 import static java.util.Arrays.stream;
 import static java.util.stream.Collectors.joining;
 
 public class Strings {
 	
-	public static final Predicate<String> Blank = Strings::blank;
-	public static final Predicate<String> notBlank = Strings::notBlank;
-	public static final Predicate<String> allAlphas = Strings::allAlphas;
-	public static final Predicate<String> noDigits = Strings::noDigits;
-
+	public static final Predicate<String> BLANK = Strings::blank;
+	public static final Predicate<String> NOT_BLANK = Strings::notBlank;
+	public static final Predicate<String> ALL_ALPHAS = Strings::allAlphas;
+	public static final Predicate<String> NO_DIGITS = Strings::noDigits;
+	public static final String ALWAYS_FAIL_MATCH_PATTERN = "^\b$"; //or "(?!)", "\B\b"
+	
 	public static boolean notBlank(String str) {
 		return !blank(str);
 	}
@@ -43,16 +45,22 @@ public class Strings {
 		String matchFlagsRegex = String.format("(?%s)", stream(matchFlags).collect(joining("")));
 		if (isAValidPattern(matchFlagsRegex) && isAValidPattern(regex)) return matchFlagsRegex.concat(regex);
 		String[] regexParts = regex.split("(?<=[[\\[\\]()^&*.+-]&&[^\\\\]])|(?=[[\\[\\]()^&*.+-]&&[^\\\\]])");
-		String slashedRegex = stream(regexParts)
+		String escapedRegex = stream(regexParts)
 				                      .map(s -> {
 					                      if (s.matches("^[\\[\\]()^&*.+-]") && !s.equals("\\")) s = "\\".concat(s);
 					                      return s;
 				                      })
 				                      .collect(joining(""));
-		String result = matchFlagsRegex.concat(slashedRegex);
-		//mock regex with always-fail-pattern if we can't "repair" available one
-		if (!isAValidPattern(result)) result = "^\b$"; //or "(?!)", "\B\b"
+		String result = matchFlagsRegex.concat(escapedRegex);
+		//mock regex with always-fail-match-pattern if we can't "repair" available one
+		if (!isAValidPattern(result)) result = ALWAYS_FAIL_MATCH_PATTERN;
 		SimpleLog.log("getValidPattern: result==%s", result);
 		return result;
+	}
+	
+	public static String escapeRegEx(String regex, String escapeTarget) {
+		return Stream.of(regex.split("|"))
+				       .map(s -> s.length()==1 && s.equals(escapeTarget) ? String.format("\\%s", escapeTarget) : s)
+				       .collect(joining());
 	}
 }

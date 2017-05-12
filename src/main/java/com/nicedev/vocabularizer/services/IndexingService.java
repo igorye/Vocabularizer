@@ -163,7 +163,7 @@ public class IndexingService<M> extends Service<Map<String, Collection<String>>>
 		while (matcher.find()) HWs.add(matcher.group(1).trim());
 		Set<String> separateHWs = HWs.stream()
 				                          .flatMap(s -> stream(s.split("[,.:;/()\\s\\\\]"))
-						                                        .filter(Strings.notBlank)
+						                                        .filter(Strings.NOT_BLANK)
 						                                        .distinct())
 				                          .collect(toSet());
 		HWs.addAll(separateHWs);

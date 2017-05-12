@@ -62,7 +62,7 @@ public class WebViewTab extends Tab {
 		if (text == null) return text;
 		int textLength = text.length();
 		text = stream(text.split("(?<=[\\r\\n\\f])"))
-				       .filter(Strings.notBlank).map(s -> s.replaceAll("[ ]{2,}|\\t+", " "))
+				       .filter(Strings.NOT_BLANK).map(s -> s.replaceAll("[ ]{2,}|\\t+", " "))
 				       .collect(joining(" "));
 		text = text.split("[\\n\\r\\f]")[0];
 		int limit = lengthLimit.length > 0 ? lengthLimit[0] : Math.min(DEFAULT_LENGTH, text.length());

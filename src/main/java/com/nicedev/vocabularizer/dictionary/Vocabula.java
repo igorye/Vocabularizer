@@ -2,11 +2,8 @@ package com.nicedev.vocabularizer.dictionary;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.function.*;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
-import static java.util.stream.Collector.Characteristics.*;
 import static java.util.stream.Collectors.joining;
 
 public class Vocabula implements Serializable, Comparable {
@@ -46,49 +43,6 @@ public class Vocabula implements Serializable, Comparable {
 		this(charSeq, lang, "");
 	}
 	
-	private Collector<Map.Entry<PartOfSpeech, Definition>, Map<PartOfSpeech, Set<Definition>>, Map<PartOfSpeech, Set<Definition>>> getDefinesToMapPoSCollector() {
-		return new Collector<Map.Entry<PartOfSpeech, Definition>, Map<PartOfSpeech, Set<Definition>>, Map<PartOfSpeech, Set<Definition>>>() {
-			@Override
-			public Supplier<Map<PartOfSpeech, Set<Definition>>> supplier() {
-				return TreeMap::new;
-			}
-			
-			@Override
-			public BiConsumer<Map<PartOfSpeech, Set<Definition>>, Map.Entry<PartOfSpeech, Definition>> accumulator() {
-				return (partOfSpeechSetMap, partOfSpeechDefinitionEntry) -> {
-					Set<Definition> defs = partOfSpeechSetMap.getOrDefault(partOfSpeechDefinitionEntry.getKey(), new LinkedHashSet<>());
-					defs.add(partOfSpeechDefinitionEntry.getValue());
-					partOfSpeechSetMap.putIfAbsent(partOfSpeechDefinitionEntry.getKey(), defs);
-				};
-			}
-			
-			@Override
-			public BinaryOperator<Map<PartOfSpeech, Set<Definition>>> combiner() {
-				return (partOfSpeechSetMap, partOfSpeechSetMap2) -> {
-					partOfSpeechSetMap2.keySet().forEach(partOfSpeech -> {
-						Set<Definition> defsTo = partOfSpeechSetMap.getOrDefault(partOfSpeech, new LinkedHashSet<>());
-						Set<Definition> defsFrom = partOfSpeechSetMap2.getOrDefault(partOfSpeech, new LinkedHashSet<>());
-						if (defsTo.isEmpty() && !defsFrom.isEmpty()) {
-							defsTo.addAll(defsFrom);
-							partOfSpeechSetMap.putIfAbsent(partOfSpeech, defsTo);
-						}
-					});
-					return partOfSpeechSetMap;
-				};
-			}
-			
-			@Override
-			public Function<Map<PartOfSpeech, Set<Definition>>, Map<PartOfSpeech, Set<Definition>>> finisher() {
-				return Function.identity();
-			}
-			
-			@Override
-			public Set<Characteristics> characteristics() {
-				return Collections.unmodifiableSet(EnumSet.of(IDENTITY_FINISH, UNORDERED, CONCURRENT));
-			}
-		};
-	}
-	
 	public boolean addPartOfSpeech(String partOfSpeechName, String meaning) {
 		PartOfSpeech pos = language.getPartOfSpeech(partOfSpeechName);
 		Set<Definition> definitions = mapPOS.getOrDefault(pos, new LinkedHashSet<>());
@@ -105,15 +59,6 @@ public class Vocabula implements Serializable, Comparable {
 	
 	public void addPartsOfSpeech(Vocabula newVoc) {
 		newVoc.mapPOS.keySet().forEach(pos -> addDefinitions(pos, newVoc.mapPOS.get(pos)));
-	}
-	
-	public void addPartsOfSpeech(Set<Definition> definitions, Predicate<Vocabula> predicate) {
-		Map<PartOfSpeech, Set<Definition>> newMapPosDefinitions =
-				definitions.stream()
-						.filter(def -> def.defines.getKey().headWord.equals(headWord) && predicate.test(this))
-						.map(def -> new AbstractMap.SimpleEntry<>(def.defines.getValue(), def))
-						.collect(getDefinesToMapPoSCollector());
-		mapPOS.putAll(newMapPosDefinitions);
 	}
 	
 	public void addPronunciation(String source) {

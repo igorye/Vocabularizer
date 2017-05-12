@@ -140,14 +140,6 @@ public class WebTabPane extends TabPane {
 		return tabs.size();
 	}
 	
-	/*private void tabInfo(Tab tab) {
-		System.out.printf("--------------------%n");
-		System.out.printf("Class: %s%n", tab.getClass().getSimpleName());
-		System.out.printf("Caption: %s%n", tab.getText());
-		System.out.printf("Tooltip: %s%n", tab.getTooltip().getText());
-		System.out.printf("--------------------%n");
-	}*/
-	
 	public void insertIfAbsent(List<String> tabTitles,
 	                           Function<String, WebViewTab> tabSupplier, Class<? extends WebViewTab> suppliedClass) {
 		List<String> presentTabs = tabTitles.stream()
