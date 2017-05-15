@@ -11,8 +11,7 @@ import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-import static com.nicedev.util.Strings.getValidPattern;
-import static com.nicedev.util.Strings.isAValidPattern;
+import static com.nicedev.util.Strings.*;
 import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;

@@ -2,9 +2,8 @@ package com.nicedev.vocabularizer.dictionary;
 
 import java.io.Serializable;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import static com.nicedev.util.Html.wrapInTag;
 import static java.util.stream.Collectors.joining;
 
 public class Definition implements Serializable, Comparable{
@@ -132,14 +131,14 @@ public class Definition implements Serializable, Comparable{
 		StringBuilder res = new StringBuilder();
 		if (explanation.length() != 0) {
 			String decoratedExpl = wrapInTag(explanation, "((?<=\\[:)([^\\[\\]:]+)(?=\\]))","span", "partofspeech");
-			res.append(String.format("<div class='definition'><table><tr><td>-</td>" +
-					                         "<td class='definition'>%s</td></tr></table>", decoratedExpl));
+			res.append(String.format("<div class=\"definition\"><table><tr><td>-</td>" +
+					                         "<td class=\"definition\">%s</td></tr></table>", decoratedExpl));
 		}
 		else if (identicalTo != null)
-			res.append(String.format("<div class='definition'><table><tr><td>-</td>" +
-					                         "<td class='definition'>see:<b>%s</b></td></tr></table>", identicalTo));
+			res.append(String.format("<div class=\"definition\"><table><tr><td>-</td>" +
+					                         "<td class=\"definition\">see:<b>%s</b></td></tr></table>", identicalTo));
 		if (!synonyms.isEmpty()){
-			res.append(String.format("\n<div class='synonym'>synonym%s: ", synonyms.size() > 1 ? "s" : ""))
+			res.append(String.format("\n<div class=\"synonym\">synonym%s: ", synonyms.size() > 1 ? "s" : ""))
 					.append(synonyms.stream()
 										.map(this::emphasizeSynonym)
 										.collect(joining(", ")))
@@ -147,24 +146,12 @@ public class Definition implements Serializable, Comparable{
 					//.append("<b>").append(synonyms.stream().collect(joining("</b>, <b>"))).append("</b></div>\n");
 		}
 		if (!useCases.isEmpty()){
-			res.append("\n<div><table><tr><td></td><td class='usecase'>")
+			res.append("\n<div><table><tr><td></td><td class=\"usecase\">")
 					.append(useCases.stream().collect(joining("<br>\n"))).append("</td></tr></table></div>\n");
 		}
 		res.append("</div>");
 		return res.toString();
 	}
-	
-	private String wrapInTag(String source, String match, String tag, String className) {
-		Matcher matcher = Pattern.compile(match).matcher(source);
-		String result = source;
-		String wrapFmt = className.isEmpty() ? "<%1$s>%3$s</%1$s>" : "<%1$s class='%2$s'>%3$s</%1$s>";
-		while (matcher.find()) {
-			String wrapped = matcher.group(matcher.groupCount() > 1 ? 1 : 0);
-			result = source.replace(wrapped, String.format(wrapFmt, tag, className, wrapped));
-		}
-		return result;
-	}
-	
 	
 	public void addSynonyms(Collection<String> synonyms) {
 		synonyms.forEach(s -> this.synonyms.add(s.trim()));

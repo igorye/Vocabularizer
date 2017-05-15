@@ -36,12 +36,6 @@ public class Combinatorics {
 		return getRangeProduct(n - m + 1, n) / factorial(m);
 	}
 	
-	// n! / (n-m)! == (n-m+1)* .. *(n-1)*n
-	private static long getAccommodationsCount(int n, int m) {
-		checkArgs(n, m);
-		return getRangeProduct(n - m + 1, n);
-	}
-	
 	private static void checkArgs(int n, int m) {
 		if (m <= 0)
 			throw new IllegalArgumentException("bySize should be grater than 0");
@@ -213,9 +207,13 @@ public class Combinatorics {
 		}
 	}
 	
+	private static <T> int getPermutationsCont(T[] inputSet) {
+		return (int) factorial(inputSet.length);
+	}
+	
 	@SuppressWarnings("unchecked")
 	public static<T> T[][] getPermutations(T[] inputSet) {
-		int permutationsCount = (int) factorial(inputSet.length);
+		int permutationsCount = getPermutationsCont(inputSet);
 		T[][] permutations = (T[][]) Array.newInstance(inputSet.getClass(), permutationsCount);
 		int[] addedCount = new int[]{0};
 		getPermutations(inputSet, permutations, inputSet.length, addedCount);
@@ -261,6 +259,12 @@ public class Combinatorics {
 		forEachUniqueCombination(inputSet, bySize, ts -> forEachPermutation(ts, ts.size(), consumer));
 	}
 	
+	// n! / (n-m)! == (n-m+1)* .. *(n-1)*n
+	private static long getAccommodationsCount(int n, int m) {
+		checkArgs(n, m);
+		return getRangeProduct(n - m + 1, n);
+	}
+	
 	public static <T> Collection<Collection<T>> getAccommodations(Collection<T> inputSet, int bySize) {
 		long accommodationCountL = getAccommodationsCount(inputSet.size(), bySize);
 		if (accommodationCountL > ARRAY_LIST_MAX_CAPACITY)
@@ -271,4 +275,11 @@ public class Combinatorics {
 		return accommodations;
 	}
 	
+	////todo: implement via arrays
+	@SuppressWarnings("unchecked")
+	public static <T> T[][] getAccommodations(T[] inputSet, int bySize) {
+		Collection<Collection<T>> accommodations = getAccommodations(Arrays.asList(inputSet), bySize);
+		T[][] result = (T[][]) Array.newInstance(inputSet.getClass(), 0);
+		return accommodations.stream().map(ts -> ts.toArray(inputSet)).collect(Collectors.toList()).toArray(result);
+	}
 }

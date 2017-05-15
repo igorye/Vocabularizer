@@ -1,5 +1,5 @@
 body {
-    background-color: #FBFBFB;
+    background-color: #FCFCFC;
 }
 
 div {
@@ -51,7 +51,7 @@ td {
 }
 
 td.definition {
-    background-color: hsl(0, 0%, 92%);
+    background-color: hsl(0, 0%, 95%);
     margin-bottom: 20px;
 }
 
@@ -70,4 +70,10 @@ a {
     color: black;
     font-weight: bold;
     text-decoration: none;
+}
+
+.highlighted {
+    background-color: #BBE7FF;
+    border-radius: 5px;
+    padding: 1px 1px 1px 1px;
 }
