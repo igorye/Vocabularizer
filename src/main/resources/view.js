@@ -22,9 +22,14 @@ function setFolding() {
         }
 }
 
-function explainHeadWord(hwElement) {
-    jsBridge.jsHandleQuery(hwElement.innerHTML);
+//function explainHeadWord(hwElement) {
+//    jsBridge.jsHandleQuery(hwElement.innerHTML);
+//}
+
+function explainHeadWord(hwElement, highlight) {
+    jsBridge.jsHandleQuery(hwElement.innerHTML, highlight);
 }
+
 
 function testBridge() {
     jsBridge.jsTest();

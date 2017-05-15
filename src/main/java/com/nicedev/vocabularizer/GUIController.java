@@ -50,19 +50,18 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Predicate;
+import java.util.function.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static com.nicedev.util.Comparators.indexOfCmpr;
 import static com.nicedev.util.Comparators.startsWithCmpr;
+import static com.nicedev.util.Html.wrapInTag;
 import static com.nicedev.util.SimpleLog.log;
 import static com.nicedev.util.Streams.getStream;
 import static com.nicedev.util.Strings.getValidPattern;
+import static com.nicedev.util.Strings.regexEscapeSymbols;
 import static java.lang.Math.max;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.nio.file.StandardOpenOption.CREATE;
@@ -726,7 +725,7 @@ public class GUIController implements Initializable {
 			filterCache.clear();
 			filterCache.putPersistent(filterList(ALL_MATCH));
 			try {
-				ofNullable(mainTab.getText()).filter(String::isEmpty).ifPresent(val -> hwData.setAll(filterList(val)));
+				ofNullable(mainTab.getText()).ifPresent(val -> hwData.setAll(filterList(val)));
 			} catch (Exception e) {
 				log("reset cache: unexpected exception - %s | %s", e.getMessage(), e.getCause().getMessage());
 			}
@@ -766,6 +765,14 @@ public class GUIController implements Initializable {
 	
 	public class JSBridge {
 		@SuppressWarnings("unused")
+		public void jsHandleQuery(String headWord, String highlight) {
+			log("jsBridge: jsHandleQuery: requested %s", headWord);
+			// remove any tags
+			headWord = headWord.replaceAll("<[^<>]+>", "");
+			handleQuery(headWord, highlight);
+		}
+		
+		@SuppressWarnings("unused")
 		public void jsHandleQuery(String headWord) {
 			log("jsBridge: jsHandleQuery: requested %s", headWord);
 			handleQuery(headWord);
@@ -793,7 +800,7 @@ public class GUIController implements Initializable {
 		}
 	};
 	
-	private Function<String, WebViewTab> expositorTabSupplier = (title) -> {
+	private BiFunction<String, String[], WebViewTab> expositorTabSupplier = (title, highlights) -> {
 		WebViewTab newTab;
 		if (!title.contains(COMPARING_DELIMITER)) {
 			newTab = new ExpositorTab(title, dictionary.getVocabula(title));
@@ -807,7 +814,7 @@ public class GUIController implements Initializable {
 						handleQuery(headWord);
 						updateQueryField(headWord, false);
 					} else {
-						updateView(optVocabula.get().toHTML());
+						updateView(optVocabula.get().toHTML(), highlights);
 						pronounce(optVocabula.get());
 					}
 					newTab.setUserData(Boolean.FALSE);
@@ -818,7 +825,7 @@ public class GUIController implements Initializable {
 			newTab.setUserData(Boolean.TRUE);
 			newTab.selectedProperty().addListener((observable, oldValue, newValue) -> Platform.runLater(() -> {
 				if ((Boolean) newTab.getUserData() && newValue) {
-					String[] headwords = title.split(Strings.escapeRegEx(COMPARING_DELIMITER, "|"));
+					String[] headwords = title.split(Strings.regexEscapeSymbols(COMPARING_DELIMITER, "|"));
 					Collection<Vocabula> compared = Arrays.stream(headwords)
 							                                .map(dictionary::getVocabula)
 							                                .filter(Optional::isPresent)
@@ -841,13 +848,8 @@ public class GUIController implements Initializable {
 		return userData.filter(Optional::isPresent).map(Optional::get);
 	}
 	
-	private Optional<List<Vocabula>> getAssignedVocabulas(Tab newTab) {
-		Optional<Optional<List<Vocabula>>> userData = ofNullable((Optional<List<Vocabula>>) newTab.getContent().getUserData());
-		return userData.filter(Optional::isPresent).map(Optional::get);
-	}
-	
-	private Function<String, WebViewTab> translationTabSupplier(Function<String, String> requestFormatter) {
-		return (title) -> {
+	private BiFunction<String, String[], WebViewTab> translationTabSupplier(Function<String, String> requestFormatter) {
+		return (title, _arg) -> {
 			WebViewTab newTab = new TranslationTab(title, requestFormatter.apply(encodeURL(title)));
 			newTab.addHandlers(viewHndlrsSetter);
 			return newTab;
@@ -902,7 +904,7 @@ public class GUIController implements Initializable {
 		
 		// headwords comparing available only from tableView
 		if (contextMenu instanceof ContextMenu) {
-			EventHandler<ActionEvent> compareHeadwordsEH = e -> compareHeadwords(context);
+			EventHandler<ActionEvent> compareHeadwordsEH = e -> compareHeadwords();
 			GUIUtil.addMenuItem("Compare", compareHeadwordsEH, contextMenu);
 		}
 		// default translation behavior is not available in compare mode
@@ -928,7 +930,7 @@ public class GUIController implements Initializable {
 		GUIUtil.addMenuItem("Delete headword", deleteHeadwordEH, contextMenu);
 	}
 	
-	private void compareHeadwords(Optional<String> context) {
+	private void compareHeadwords() {
 			if (relevantSelectionOwner == hwTable) {
 				List<String> comparingPairs;
 				if (selectedHWItems.size() > 2)
@@ -949,7 +951,7 @@ public class GUIController implements Initializable {
 					              .replaceAll("\\t+| {2,}", " ");
 			String translationURL = requestFormatter.apply(encodeURL(text));
 			if (!tabPane.trySelectTab(TranslationTab.sameTab(translationURL)))
-				tabPane.insertTab(translationTabSupplier(requestFormatter).apply(text), true);
+				tabPane.insertTab(translationTabSupplier(requestFormatter).apply(text, null), true);
 		}
 	}
 	
@@ -970,9 +972,7 @@ public class GUIController implements Initializable {
 					                 .filter(Strings::notBlank)
 					                 .collect(joining("\n"));
 			bw.write(history);
-		} catch (IOException e) {
-			// NOP
-		}
+		} catch (IOException e) { /* NOP */ }
 	}
 	
 	private void loadRecentQueries() {
@@ -985,13 +985,13 @@ public class GUIController implements Initializable {
 		}
 	}
 	
-	private void handleQuery(String query) {
-		boolean foundPresent = tabPane.trySelectTab(ExpositorTab.sameTab(query))
+	private void handleQuery(String query, String... textsToHighlight) {
+		boolean foundQueried = tabPane.trySelectTab(ExpositorTab.sameTab(query))
 				                       && getAssignedVocabula(tabPane.getActiveTab()).isPresent();
-		if (!foundPresent) handleQueryImpl(query);
+		if (!foundQueried) handleQueryImpl(query, textsToHighlight);
 	}
 	
-	private void handleQueryImpl(String query) {
+	private void handleQueryImpl(String query, String... textsToHighlight) {
 		String filteredQuery = removeGaps(query);
 		if (filteredQuery.isEmpty()) return;
 		updateTableState();
@@ -1002,7 +1002,7 @@ public class GUIController implements Initializable {
 				Optional<Vocabula> optVocabula = dictionary.getVocabula(filteredQuery);
 				String cQuery = filteredQuery.replaceAll("~", "").trim();
 				if (optVocabula.isPresent()) {
-					showQueryResult(optVocabula.get());
+					showQueryResult(optVocabula.get(), textsToHighlight);
 				} else {
 					boolean acceptSimilar = filteredQuery.startsWith("~") || toggleSimilar.isSelected();
 					Set<Vocabula> vocabulas = findVocabula(cQuery, acceptSimilar);
@@ -1018,7 +1018,7 @@ public class GUIController implements Initializable {
 						hwData.setAll(addedVs.stream().map(v -> v.headWord).collect(toList()));
 						alterSearchIndex(addedVs);
 						if (nAdded == 1 && hwData.contains(cQuery) ) {
-							showQueryResult(addedVs.iterator().next());
+							showQueryResult(addedVs.iterator().next(), textsToHighlight);
 						} else {
 							Platform.runLater(() -> {
 								tabPane.removeTab(cQuery);
@@ -1029,9 +1029,9 @@ public class GUIController implements Initializable {
 //						log("HQ: updateQueryField(%s,%s)", cQuery, false);
 						updateQueryField(cQuery, false);
 					} else {
-						Optional<Vocabula> featuredVocabula = getFeaturedVocabula(cQuery);
-						if (featuredVocabula.isPresent()) {
-							showQueryResult(featuredVocabula.get());
+						Optional<Vocabula> featuringVocabula = getFeaturingVocabula(cQuery);
+						if (featuringVocabula.isPresent()) {
+							showQueryResult(featuringVocabula.get(), cQuery);
 						} else {
 							hwData.setAll(getSuggestions(cQuery));
 							Platform.runLater(() -> {
@@ -1069,31 +1069,32 @@ public class GUIController implements Initializable {
 		queryBox.getSelectionModel().select(0);
 	}
 	
-	private Optional<Vocabula> getFeaturedVocabula(String headWord) {
+	private Optional<Vocabula> getFeaturingVocabula(String headWord) {
 		List<String> mentions = filterList(headWord);
 		return filterList(headWord).stream()
-				       .filter(hw -> !hw.equals(headWord) && (filterList(hw).contains(headWord) || mentions.size() == 2))
+				       .filter(hw -> !hw.equalsIgnoreCase(headWord)
+						                     && (filterList(hw.toLowerCase()).contains(headWord) || mentions.size() == 2))
 				       .findFirst()
 				       .flatMap(hw -> dictionary.getVocabula(hw));
 	}
 	
-	private void showQueryResult(Vocabula vocabula) {
-		Platform.runLater(() -> showQueryResultImpl(vocabula));
+	private void showQueryResult(Vocabula vocabula, String... textsToHighlight) {
+		Platform.runLater(() -> showQueryResultImpl(vocabula, textsToHighlight));
 	}
 	
-	private void showQueryResultImpl(Vocabula vocabula) {
+	private void showQueryResultImpl(Vocabula vocabula, String... textsToHighlight) {
 		Tab currentTab = tabPane.getActiveTab();
 		if (ctrlIsDown || tabPane.getTabs().size() == 1 || (currentTab instanceof TranslationTab)
 				    || (!tabPane.trySelectTab(ExpositorTab.sameTab(vocabula.headWord))
 						        && !(currentTab instanceof ExpositorTab
 								             || tabPane.trySelectTab(tab -> tab instanceof ExpositorTab)))) {
-			tabPane.insertTab(expositorTabSupplier.apply(vocabula.headWord), true);
+			tabPane.insertTab(expositorTabSupplier.apply(vocabula.headWord, textsToHighlight), true);
 		} else {
 			currentTab = tabPane.getActiveTab();
 			currentTab.setText(vocabula.headWord);
 			currentTab.getContent().setUserData(Optional.of(vocabula));
 			log("showQueryResultImpl: updateView for\"%s\"", vocabula.headWord);
-			updateView(vocabula.toHTML());
+			updateView(vocabula.toHTML(), textsToHighlight);
 			pronounce(vocabula);
 			log("SQRI: updateQueryField(%s,%s)", vocabula.headWord, false);
 			updateQueryField(vocabula.headWord, false);
@@ -1103,7 +1104,8 @@ public class GUIController implements Initializable {
 	private void deleteHeadword(Optional<String> selection) {
 		Collection<String> headwords = selection
 				                               .map(s -> Stream.of(s.split("[\\n\\r\\f]"))
-						                                         .filter(Strings::notBlank).collect(toList()))
+						                                         .filter(Strings::notBlank)
+						                                         .collect(toList()))
 				                               .orElse(selectedHWItems).stream().collect(toList());
 		int count = headwords.size();
 		Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, getDeleteMsg(count), ButtonType.YES, ButtonType.NO);
@@ -1193,17 +1195,26 @@ public class GUIController implements Initializable {
 				       .collect(toList());
 	}
 	
-	private void updateView(String body) {
+	private void updateView(String body, String... textsToHighlight) {
 		if (body.isEmpty()) {
 			tabPane.getActiveEngine().ifPresent(engine -> engine.loadContent(""));
 			return;
 		}
 		tabPane.getActiveEngine().ifPresent(engine -> {
 			setSceneCursor(Cursor.WAIT);
-			String fmt = "<html>\n<head>\n<link rel='stylesheet' href='%s'/>" +
-					             "<script src='%s'></script>" +
-					             "</head>\n<body>\n%s</body>\n</html>";
-			String htmlContent = String.format(fmt, cssHref, jsHref, enableAnchors(body));
+			String fmt = "<html>%n<head>%n<link rel='stylesheet' href='%s'/>%n<script src='%s'></script>%n" +
+					             "</head>%n<body>%n%s</body>%n</html>";
+			String bodyContent = body;
+			if (textsToHighlight != null && textsToHighlight.length > 0) {
+				String wrapped = regexEscapeSymbols(Arrays.stream(textsToHighlight).collect(joining("|")), "[()]");
+				//pattern not matching JS function parameter
+				String matchRegex = String.format("(?i)%s", wrapped);
+				if (!wrapped.isEmpty()) {
+					bodyContent = wrapInTag(bodyContent, matchRegex, "span", "highlighted");
+				}
+			}
+			bodyContent = enableAnchors(bodyContent);
+			String htmlContent = String.format(fmt, cssHref, jsHref, bodyContent);
 			engine.loadContent(htmlContent);
 			tabPane.getActiveTab().getContent().requestFocus();
 		});
@@ -1211,17 +1222,21 @@ public class GUIController implements Initializable {
 	}
 	
 	private String enableAnchors(String body) {
-		Matcher bToA = Pattern.compile("(<b>([^<>]+)</b>)").matcher(body);
-		String aFmt = "<a href=\"#\" onclick=\"explainHeadWord(this);\">%s</a>";
-		String headWord = getAssignedVocabula(tabPane.getActiveTab())
-				                  .map(vocabula -> vocabula.headWord)
-				                  .orElse(tabPane.getActiveTab().getTooltip().getText());
+		////todo: probably should split bTag content if there's a <span> inside already
+		Matcher bToA = Pattern.compile("(?i)(<b>([^<>]+)</b>)").matcher(body);
+		String headWord = Strings.regexSubstr("<td class=\"headword\">([^<>]+)</td>", body);
+		String anchorFmt = "<a href=\"#\" onclick=\"explainHeadWord(this, highlighted);\">%s</a>";
 		String alteredBody = body;
 		while (bToA.find()) {
-			String replaced = bToA.group(1).replaceAll("\\(", "\\\\(").replaceAll("\\)", "\\\\)");
+			String replaced = regexEscapeSymbols(bToA.group(1), "[()]");
 			String anchored = bToA.group(2);
-			if (!anchored.equals(headWord)) alteredBody = alteredBody.replaceAll(replaced, String.format(aFmt, anchored));
+			if (!anchored.equalsIgnoreCase(headWord)) {
+				String replacement = String.format(anchorFmt, anchored);
+				alteredBody = alteredBody.replaceAll(replaced, replacement);
+			}
 		}
+		headWord = Strings.regexToNonstrictSymbols(headWord,"[()/]");
+		alteredBody = String.format("<script>highlighted = \"%s\";</script>%s", headWord, alteredBody);
 		return alteredBody;
 	}
 	
@@ -1298,7 +1313,7 @@ public class GUIController implements Initializable {
 		while (matcher.find()) HWs.add(matcher.group(1).trim());
 		Set<String> separateHWs = HWs.stream()
 				                          .filter(s -> !s.matches("\\p{Punct}}"))
-				                          .flatMap(s -> Stream.of(s.split("[,.:;'/()\\s\\\\]"))
+				                          .flatMap(s -> Stream.of(s.split("[,.:;'\"/()\\s\\\\]"))
 						                                        .filter(Strings.NOT_BLANK)
 						                                        .filter(sp -> !sp.matches("\\p{Punct}"))
 						                                        .distinct())

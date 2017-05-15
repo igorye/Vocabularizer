@@ -296,7 +296,15 @@ public class Dictionary implements Serializable{
 	}
 	
 	public Optional<Vocabula> getVocabula(String entry) {
-		return ofNullable(articles.get(entry));
+		List<String> candidates = articles.keySet().stream()
+				                          .filter(s -> s.matches("(?i)" + entry))
+				                          .filter(s -> s.substring(0,1).equalsIgnoreCase(entry.substring(0, 1)))
+																	.sorted()
+				                          .collect(toList());
+		if (candidates.size() == 1)
+			return ofNullable(articles.get(candidates.get(0)));
+		else
+			return ofNullable(articles.get(entry));
 	}
 	
 	private String splitBTag(String source) {

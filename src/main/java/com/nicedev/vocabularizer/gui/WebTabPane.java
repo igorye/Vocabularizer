@@ -12,6 +12,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -141,7 +142,8 @@ public class WebTabPane extends TabPane {
 	}
 	
 	public void insertIfAbsent(List<String> tabTitles,
-	                           Function<String, WebViewTab> tabSupplier, Class<? extends WebViewTab> suppliedClass) {
+	                           BiFunction<String, String[], WebViewTab> tabSupplier,
+	                           Class<? extends WebViewTab> suppliedClass) {
 		List<String> presentTabs = tabTitles.stream()
 				                           .flatMap(s -> getTabs().stream()
 						                                         .filter(suppliedClass::isInstance)
@@ -150,7 +152,7 @@ public class WebTabPane extends TabPane {
 		tabTitles.stream()
 				.filter(Objects::nonNull)
 				.filter(s -> !presentTabs.contains(s))
-				.forEach(s -> insertTab(tabSupplier.apply(s), tabTitles.size() == 1));
+				.forEach(s -> insertTab(tabSupplier.apply(s, new String[0]), tabTitles.size() == 1));
 	}
 	
 	public void addIfAbsent(List<String> tabArgs,

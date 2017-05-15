@@ -1,6 +1,8 @@
 package com.nicedev.util;
 
+import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Stream;
@@ -58,9 +60,25 @@ public class Strings {
 		return result;
 	}
 	
-	public static String escapeRegEx(String regex, String escapeTarget) {
-		return Stream.of(regex.split("|"))
-				       .map(s -> s.length()==1 && s.equals(escapeTarget) ? String.format("\\%s", escapeTarget) : s)
-				       .collect(joining());
+	public static String regexEscapeSymbols(String regex, String escapeRegex) {
+		return forEachSymbol(regex, escapeRegex, s -> s.matches(escapeRegex) ? String.format("\\%s", s) : s);
 	}
+	
+	public static String regexToNonstrictSymbols(String regex, String symbolRegex) {
+		return forEachSymbol(regex, symbolRegex, s -> s.matches(symbolRegex) ? String.format("%s?", s) : s);
+	}
+	
+	private static String forEachSymbol(String regex, String escapeRegex, Function<? super String, ? extends String> transformer) {
+		return Stream.of(regex.split("|")).map(transformer).collect(joining());
+	}
+	
+	// return substring matching provided regex's 1st (or sole) capturing group
+	public static String regexSubstr(String regex, String source) {
+		Matcher matcher = Pattern.compile(regex).matcher(source);
+		if (matcher.find()) {
+			return matcher.group(matcher.groupCount() > 0 ? 1 : 0);
+		}
+		return "";
+	}
+	
 }

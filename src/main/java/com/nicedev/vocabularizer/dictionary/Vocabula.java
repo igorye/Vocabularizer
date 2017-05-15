@@ -198,10 +198,10 @@ public class Vocabula implements Serializable, Comparable {
 	
 	public String toHTML() {
 		StringBuilder res = new StringBuilder();
-		String headWordFmt = "<table><tr><td class='headword'>%s</td><td class='transcription'>[%s]</td></tr></table>";
+		String headWordFmt = "<table><tr><td class=\"headword\">%s</td><td class=\"transcription\">[%s]</td></tr></table>";
 		res.append(String.format(headWordFmt, headWord, getTranscription()));
 		mapPOS.keySet().forEach(partOfSpeech -> {
-			res.append(String.format("<div class='partofspeech'><span style='none'>:</span> %s", partOfSpeech));
+			res.append(String.format("<div class=\"partofspeech\"><span style=\"none\">:</span> %s", partOfSpeech));
 			Set<String> forms = getKnownForms(partOfSpeech);
 			if (!forms.isEmpty())
 				res.append(String.format("<div>form%s: ", forms.size() > 1 ? "s" : ""))
