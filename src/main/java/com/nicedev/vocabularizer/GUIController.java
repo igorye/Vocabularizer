@@ -75,6 +75,7 @@ import static javafx.scene.input.KeyCode.SPACE;
 
 public class GUIController implements Initializable {
 	
+	public static final String CLASS_HIGHLIGHTED = "highlighted";
 	@FXML
 	public ToggleButton toggleSimilar;
 	@FXML
@@ -727,7 +728,7 @@ public class GUIController implements Initializable {
 			filterCache.clear();
 			filterCache.putPersistent(filterList(ALL_MATCH));
 			try {
-				ofNullable(mainTab.getText()).ifPresent(val -> hwData.setAll(filterList(val)));
+				ofNullable(mainTab.getText()).filter(Strings::blank).ifPresent(val -> hwData.setAll(filterList(val)));
 			} catch (Exception e) {
 				log("reset cache: unexpected exception - %s | %s", e.getMessage(), e.getCause().getMessage());
 			}
@@ -1201,30 +1202,30 @@ public class GUIController implements Initializable {
 		}
 		tabPane.getActiveEngine().ifPresent(engine -> {
 			setSceneCursor(Cursor.WAIT);
-			String fmt = "<html>%n<head>%n<link rel='stylesheet' href='%s'/>%n<script src='%s'></script>%n" +
-					             "</head>%n<body>%n%s</body>%n</html>";
+			String contentFmt = "<html>%n<head>%n<link rel='stylesheet' href='%s'/>%n<script src='%s'></script>%n" +
+					                    "</head>%n<body>%n%s</body>%n</html>";
 			String bodyContent = body;
 			if (textsToHighlight != null && textsToHighlight.length > 0) {
-				String wrapped = regexEscapeSymbols(Arrays.stream(textsToHighlight).collect(joining("|")), "[()]");
-				//pattern not matching JS function parameter
-				String matchRegex = String.format("(?i)%s", wrapped);
-				if (!wrapped.isEmpty()) {
-					bodyContent = wrapInTag(bodyContent, matchRegex, "span", "highlighted");
+				String highlighted = regexEscapeSymbols(Arrays.stream(textsToHighlight).collect(joining("|")), "[()]");
+				// match tag's boundary or word's boundary inside tag
+				String highlightedMatch = String.format("(?i)%s(?=</| )|(?<=>| )$1s", highlighted);
+				if (!highlighted.isEmpty()) {
+					bodyContent = wrapInTag(bodyContent, highlightedMatch, "span", CLASS_HIGHLIGHTED);
 				}
 			}
-			bodyContent = enableAnchors(bodyContent);
-			String htmlContent = String.format(fmt, cssHref, jsHref, bodyContent);
+			bodyContent = injectAnchors(bodyContent);
+			String htmlContent = String.format(contentFmt, cssHref, jsHref, bodyContent);
 			engine.loadContent(htmlContent);
 			tabPane.getActiveTab().getContent().requestFocus();
 		});
 		setSceneCursor(Cursor.DEFAULT);
 	}
 	
-	private String enableAnchors(String body) {
+	private String injectAnchors(String body) {
 		////todo: probably should split bTag content if there's a <span> inside already
 		Matcher bToA = Pattern.compile("(?i)(<b>([^<>]+)</b>)").matcher(body);
 		String headWord = Strings.regexSubstr("<td class=\"headword\">([^<>]+)</td>", body);
-		String anchorFmt = "<a href=\"#\" onclick=\"explainHeadWord(this, highlighted);\">%s</a>";
+		String anchorFmt = "<a href=\"#\" onclick=\"explainHeadWord(this, " + CLASS_HIGHLIGHTED + ");\">%s</a>";
 		String alteredBody = body;
 		while (bToA.find()) {
 			String replaced = regexEscapeSymbols(bToA.group(1), "[()]");
@@ -1235,7 +1236,7 @@ public class GUIController implements Initializable {
 			}
 		}
 		headWord = Strings.regexToNonstrictSymbols(headWord,"[()/]");
-		alteredBody = String.format("<script>highlighted = \"%s\";</script>%s", headWord, alteredBody);
+		alteredBody = String.format("<script>%s = \"%s\";</script>%s", CLASS_HIGHLIGHTED, headWord, alteredBody);
 		return alteredBody;
 	}
 	
