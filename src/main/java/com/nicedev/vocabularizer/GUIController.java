@@ -605,7 +605,7 @@ public class GUIController implements Initializable {
 					                   : tabPane.getActiveViewSelection();
 			if (!selection.isEmpty()) {
 				String highlight = mainTabActive ? null : tabPane.getActiveTab().getText();
-				handleQuery(removeGaps(selection), highlight);
+				handleQuery(selection, highlight);
 			}
 		}
 	}
@@ -987,26 +987,29 @@ public class GUIController implements Initializable {
 	}
 	
 	private void handleQuery(String query, String... textsToHighlight) {
-		boolean foundQueried = tabPane.trySelectTab(ExpositorTab.sameTab(query))
+		String validatedQuery = removeGaps(query);
+		if (validatedQuery.isEmpty()) return;
+		boolean queriedTabPresent = tabPane.trySelectTab(ExpositorTab.sameTab(validatedQuery))
 				                       && getAssignedVocabula(tabPane.getActiveTab()).isPresent();
-		if (!foundQueried) handleQueryImpl(query, textsToHighlight);
+		if (!queriedTabPresent) {
+			updateTableState();
+			setSceneCursor(Cursor.WAIT);
+			executor.execute(getQueryHandlingJob(validatedQuery, textsToHighlight));
+		}
 	}
 	
-	private void handleQueryImpl(String query, String... textsToHighlight) {
-		String filteredQuery = removeGaps(query);
-		if (filteredQuery.isEmpty()) return;
-		updateTableState();
-		setSceneCursor(Cursor.WAIT);
-		int defCount = dictionary.getDefinitionCount();
-		executor.execute(() -> {
+	private Runnable getQueryHandlingJob(String query, String... textsToHighlight) {
+		return () -> {
+			boolean changeOccurred = false;
 			try {
-				Optional<Vocabula> optVocabula = dictionary.getVocabula(filteredQuery);
-				String cQuery = filteredQuery.replaceAll("~", "").trim();
+				int defCount = dictionary.getDefinitionCount();
+				Optional<Vocabula> optVocabula = dictionary.getVocabula(query);
+				final String fQuery = query.replaceAll("~", "").trim();
 				if (optVocabula.isPresent()) {
 					showQueryResult(optVocabula.get(), textsToHighlight);
 				} else {
-					boolean acceptSimilar = filteredQuery.startsWith("~") || toggleSimilar.isSelected();
-					Set<Vocabula> vocabulas = findVocabula(cQuery, acceptSimilar);
+					boolean acceptSimilar = query.startsWith("~") || toggleSimilar.isSelected();
+					Set<Vocabula> vocabulas = findVocabula(fQuery, acceptSimilar);
 					if (!vocabulas.isEmpty()) {
 						Function<Set<Vocabula>, Set<Vocabula>> availableOf = vocabulaSet -> {
 							return dictionary.getVocabulas(vocabulaSet.stream().map(voc -> voc.headWord).collect(toSet()));
@@ -1018,40 +1021,33 @@ public class GUIController implements Initializable {
 						addedVs.removeAll(availableVs);
 						hwData.setAll(addedVs.stream().map(v -> v.headWord).collect(toList()));
 						alterSearchIndex(addedVs);
-						if (nAdded == 1 && hwData.contains(cQuery) ) {
+						if (nAdded == 1 && hwData.contains(fQuery)) {
 							showQueryResult(addedVs.iterator().next(), textsToHighlight);
 						} else {
-							Platform.runLater(() -> {
-								tabPane.removeTab(cQuery);
-								tabPane.selectTab(mainTab);
-							});
+							Platform.runLater(() -> { tabPane.removeTab(fQuery); tabPane.selectTab(mainTab); });
 							updateTableState(false);
 						}
-						updateQueryField(cQuery, false);
+						updateQueryField(fQuery, false);
 					} else {
-						Optional<Vocabula> featuringVocabula = getFeaturingVocabula(cQuery);
+						Optional<Vocabula> featuringVocabula = getFeaturingVocabula(fQuery);
 						if (featuringVocabula.isPresent()) {
-							showQueryResult(featuringVocabula.get(), cQuery);
+							showQueryResult(featuringVocabula.get(), fQuery);
 						} else {
-							hwData.setAll(getSuggestions(cQuery));
-							Platform.runLater(() -> {
-								tabPane.selectTab(mainTab);
-//								log("HQ: updateQueryField(%s,%s)", cQuery, false);
-								updateQueryField(cQuery, false);
-							});
+							hwData.setAll(getSuggestions(fQuery));
+							Platform.runLater(() -> { tabPane.selectTab(mainTab); updateQueryField(fQuery, false); });
 						}
 						updateTableState();
 					}
 				}
-				if (defCount != dictionary.getDefinitionCount()) updateStatistics(false);
+				if (changeOccurred = (defCount != dictionary.getDefinitionCount())) updateStatistics(false);
 			} catch (Exception e) {
 				log(e.getMessage() + e.getCause());
 			} finally {
-				if (updateCount % 5 == 0) saveDictionary();
+				if (changeOccurred) saveDictionary();
 				updateTableState(false);
 				setSceneCursor(Cursor.DEFAULT);
 			}
-		});
+		};
 	}
 	
 	private @SuppressWarnings("unused") boolean saveDictionary() {
