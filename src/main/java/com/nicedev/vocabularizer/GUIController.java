@@ -904,9 +904,8 @@ public class GUIController implements Initializable {
 	private void appendContextMenuItems(Object contextMenu, Optional<String> context) {
 		EventHandler<ActionEvent> handleQueryEH = this::onSearch;
 		GUIUtil.addMenuItem("Explain", handleQueryEH, contextMenu);
-		
 		// headwords comparing available only from tableView
-		if (contextMenu instanceof ContextMenu) {
+		if ((contextMenu instanceof ContextMenu) && selectedHWItems.size() > 1) {
 			EventHandler<ActionEvent> compareHeadwordsEH = e -> compareHeadwords();
 			GUIUtil.addMenuItem("Compare", compareHeadwordsEH, contextMenu);
 		}

@@ -88,6 +88,11 @@ public class Vocabula implements Serializable, Comparable {
 		addDefinition(partOfSpeech, definition);
 	}
 	
+	public void removeDefinition(String partName, String explanation) {
+		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partName);
+		mapPOS.get(partOfSpeech).removeIf(def -> def.explanation.equals(explanation));
+	}
+	
 	public void addDefinitions(String partOfSpeechName, Set<Definition> definitions) {
 		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
 		addDefinitions(partOfSpeech, definitions);
@@ -102,6 +107,11 @@ public class Vocabula implements Serializable, Comparable {
 	public void addDefinitions(Vocabula vocabula) {
 		if (!headWord.equals(vocabula.headWord)) return;
 		vocabula.mapPOS.keySet().forEach(pos -> mapPOS.putIfAbsent(pos, vocabula.mapPOS.get(pos)));
+	}
+	
+	public void removeDefinitions(String partName, List<String> explanations) {
+		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partName);
+		mapPOS.get(partOfSpeech).removeIf(def -> explanations.contains(def.explanation));
 	}
 	
 	public boolean removePartOfSpeech(String partOfSpeechName) {
@@ -211,7 +221,7 @@ public class Vocabula implements Serializable, Comparable {
 		});
 		return res.toString();
 	}
-
+	
     /*public String toXML() {
         StringBuilder res = new StringBuilder();
         res.append(String.format("<article>"));
@@ -253,7 +263,7 @@ public class Vocabula implements Serializable, Comparable {
 	}
 	
 	public void addSynonyms(String definition, Collection<String> synonyms) {
-		
+	
 	}
 	
 	public void addKnownForms(String partOfSpeechName, Collection<String> newForms) {
@@ -278,8 +288,8 @@ public class Vocabula implements Serializable, Comparable {
 				       .orElse(true);
 	}
 	
-	
 	public Set<PartOfSpeech> getPartsOfSpeech() {
 		return Collections.unmodifiableSet(mapPOS.keySet());
 	}
+	
 }
