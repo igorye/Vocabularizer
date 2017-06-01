@@ -5,7 +5,7 @@ import javazoom.jl.player.Player;
 import javax.sound.sampled.Clip;
 
 public class AudioController implements StopableSoundPlayer {
-	private Object player;
+	private final Object player;
 
 	AudioController(Object player) {
 		this.player = player;

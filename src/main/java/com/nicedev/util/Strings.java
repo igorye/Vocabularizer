@@ -1,7 +1,6 @@
 package com.nicedev.util;
 
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
@@ -12,17 +11,13 @@ import static java.util.stream.Collectors.joining;
 
 public class Strings {
 	
-	public static final Predicate<String> BLANK = Strings::blank;
-	public static final Predicate<String> NOT_BLANK = Strings::notBlank;
-	public static final Predicate<String> ALL_ALPHAS = Strings::allAlphas;
-	public static final Predicate<String> NO_DIGITS = Strings::noDigits;
-	public static final String ALWAYS_FAIL_MATCH_PATTERN = "^\b$"; //or "(?!)", "\B\b"
+	private static final String ALWAYS_FAIL_MATCH_PATTERN = "^\b$"; //or "(?!)", "\B\b"
 	
 	public static boolean notBlank(String str) {
-		return !blank(str);
+		return !isBlank(str);
 	}
 	
-	public static boolean blank(String str) {
+	public static boolean isBlank(String str) {
 		return str.isEmpty() || str.matches("\\p{Blank}+");
 	}
 	
@@ -34,6 +29,7 @@ public class Strings {
 		return str.matches("[^\\p{Digit}]+");
 	}
 	
+	@SuppressWarnings("ResultOfMethodCallIgnored")
 	public static boolean isAValidPattern(String filter) {
 		try {
 			Pattern.compile(filter);
@@ -43,7 +39,7 @@ public class Strings {
 		return true;
 	}
 	
-	public static String getValidPattern(String regex, String... matchFlags) {
+	public static String getValidPatternOrFailAnyMatch(String regex, String... matchFlags) {
 		String matchFlagsRegex = String.format("(?%s)", stream(matchFlags).collect(joining("")));
 		if (isAValidPattern(matchFlagsRegex) && isAValidPattern(regex)) return matchFlagsRegex.concat(regex);
 		String[] regexParts = regex.split("(?<=[[\\[\\]()^&*.+-]&&[^\\\\]])|(?=[[\\[\\]()^&*.+-]&&[^\\\\]])");
@@ -54,18 +50,18 @@ public class Strings {
 				                      })
 				                      .collect(joining(""));
 		String result = matchFlagsRegex.concat(escapedRegex);
-		//mock regex with always-fail-match-pattern if we can't "repair" available one
+		// mock regex with always-fail-match-pattern if we can't "repair" available one
 		if (!isAValidPattern(result)) result = ALWAYS_FAIL_MATCH_PATTERN;
-		SimpleLog.log("getValidPattern: result==%s", result);
+		SimpleLog.log("getValidPatternOrFailAnyMatch: result==%s", result);
 		return result;
 	}
 	
 	public static String regexEscapeSymbols(String regex, String escapeRegex) {
-		return forEachSymbol(regex, escapeRegex, s -> s.matches(escapeRegex) ? String.format("\\%s", s) : s);
+		return forEachSymbol(regex, escapeRegex, s -> s.equals(escapeRegex) || s.matches(escapeRegex) ? String.format("\\%s", s) : s);
 	}
 	
 	public static String regexToNonstrictSymbols(String regex, String symbolRegex) {
-		return forEachSymbol(regex, symbolRegex, s -> s.matches(symbolRegex) ? String.format("%s?", s) : s);
+		return forEachSymbol(regex, symbolRegex, s -> s.equals(symbolRegex) || s.matches(symbolRegex) ? String.format("%s?", s) : s);
 	}
 	
 	private static String forEachSymbol(String regex, String escapeRegex, Function<? super String, ? extends String> transformer) {
@@ -75,9 +71,7 @@ public class Strings {
 	// return substring matching provided regex's 1st (or sole) capturing group
 	public static String regexSubstr(String regex, String source) {
 		Matcher matcher = Pattern.compile(regex).matcher(source);
-		if (matcher.find()) {
-			return matcher.group(matcher.groupCount() > 0 ? 1 : 0);
-		}
+		if (matcher.find()) return matcher.group(matcher.groupCount() > 0 ? 1 : 0);
 		return "";
 	}
 	

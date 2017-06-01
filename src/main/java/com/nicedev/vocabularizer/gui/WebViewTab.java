@@ -22,7 +22,7 @@ public class WebViewTab extends Tab {
 	private WebEngine webEngine;
 	private Tooltip tooltip;
 	private WebView webView;
-	private ObjectProperty<Point2D> cursorPosition;
+	private final ObjectProperty<Point2D> cursorPosition;
 	
 	public WebViewTab() {
 		this("", null);
@@ -32,7 +32,6 @@ public class WebViewTab extends Tab {
 		this(text, new WebView());
 		getView().setUserData(userData);
 	}
-	
 	
 	private WebViewTab(String text, Node content) {
 		super(ellipsis(text), content);
@@ -62,7 +61,7 @@ public class WebViewTab extends Tab {
 		if (text == null) return text;
 		int textLength = text.length();
 		text = stream(text.split("(?<=[\\r\\n\\f])"))
-				       .filter(Strings.NOT_BLANK).map(s -> s.replaceAll("[ ]{2,}|\\t+", " "))
+				       .filter(Strings::notBlank).map(s -> s.replaceAll("[ ]{2,}|\\t+", " "))
 				       .collect(joining(" "));
 		text = text.split("[\\n\\r\\f]")[0];
 		int limit = lengthLimit.length > 0 ? lengthLimit[0] : Math.min(DEFAULT_LENGTH, text.length());

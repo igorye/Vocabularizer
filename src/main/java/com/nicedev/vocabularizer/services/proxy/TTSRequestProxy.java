@@ -27,18 +27,18 @@ public class TTSRequestProxy extends GoogleRequestProxy {
 	//request mp3 stream
 	public InputStream requestPronunciationStream(PronunciationData pronunciationData) {
 		String request = pronunciationData.pronunciationSource;
-		boolean ttsRequest = false;
+		boolean isTTSConnection = false;
 		try {
 			if (!request.contains("://"))
-				request = String.format(REQUEST_FMT.format, nextHost(), URLEncoder.encode(request, "UTF-8"), pronunciationData.accent, request.length(), request.length());
+				request = String.format(TTS_REQUEST_FMT.format, nextHost(), URLEncoder.encode(request, "UTF-8"), pronunciationData.accent, request.length(), request.length());
 		} catch (UnsupportedEncodingException e) {
 			return requestPronunciationStream(pronunciationData);
 		}
 		HttpURLConnection conn = null;
 		try {
 			conn = getRequestConnection(request);
-			ttsRequest = conn instanceof HttpsURLConnection;
-			if (ttsRequest)
+			isTTSConnection = conn instanceof HttpsURLConnection;
+			if (isTTSConnection)
 				prepareConnProps(conn);
 			int streamSize = conn.getContentLength();
 			return new BufferedInputStream(conn.getInputStream(), streamSize);
@@ -48,10 +48,10 @@ public class TTSRequestProxy extends GoogleRequestProxy {
 			try {
 				if(conn.getResponseCode() == 404) return null;
 			} catch (IOException e1) {
-				SimpleLog.log(e1.getMessage());
+				SimpleLog.log("Error has occured while proxying request to %s", e1.getMessage());
 				return null;
 			}
-			if (ttsRequest) rejectRecentHost(e);
+			if (isTTSConnection) rejectRecentHost(e);
 			return requestPronunciationStream(pronunciationData);
 		}
 	}

@@ -20,8 +20,10 @@ import static java.util.stream.Collectors.*;
 public class ExpositorApp {
 
 	private static final boolean ACCEPT_SIMILAR = Boolean.getBoolean(System.getProperties().getProperty("acceptSimilar", "false"));
-	static private String home = System.getProperties().getProperty("user.home");
-	private static String storageEn = String.format("%s\\%s.dict", home, "english");
+	private static final String PROJECT_NAME = "Vocabularizer";
+	private static final String USER_HOME = System.getProperties().getProperty("user.home");
+	private static final String PROJECT_HOME = System.getProperty(PROJECT_NAME + ".home", String.format("%s\\%s", USER_HOME, PROJECT_NAME));
+	private static final String storageEn = String.format("%s\\%s.dict", PROJECT_HOME, "english");
 	static private PronouncingService pronouncingService;
 	static private Expositor[] expositors;
 	static private Dictionary dictionary;
@@ -38,55 +40,55 @@ public class ExpositorApp {
 		String query;
 		int updateCount = 0;
 		String lastQuerry = "";
-		while (input.hasNextLine()) {
-			query = input.nextLine().trim();
-			int defCount = dictionary.getDefinitionCount();
-			if (query.trim().isEmpty())
-				continue;
-			if (query.equals("<"))
-				query = lastQuerry;
-			lastQuerry = query;
-			if (query.startsWith("-")) {
-				query = query.replaceFirst("-", "");
-				String[] tokens = query.split("\" ");
-				if (tokens.length == 0)
-					tokens = query.split("\\s");
-				if (tokens.length == 2)
-					dictionary.removeVocabula(tokens[0].replace("\"", "").trim(), tokens[1]);
-				else
-					dictionary.removeVocabula(tokens[0].replace("\"", "").trim());
-				if (defCount != dictionary.getDefinitionCount())
-					updateCount++;
-				System.out.println(dictionary);
-				continue;
-			}
-			if (query.startsWith("::")) {
-				query = query.substring(2, query.length()).trim();
-				System.out.println(dictionary.explainVocabula(query));
-				Optional<Vocabula> queried = dictionary.getVocabula(query);
-				queried.ifPresent(ExpositorApp::pronounce);
-				continue;
-			} else if (query.startsWith(":")) {
-				query = query.substring(1, query.length()).trim();
-				System.out.println(collectionToString(dictionary.filterHeadwords(query, "i"), query));
-				continue;
-			}
-			try {
+		try {
+			while (input.hasNextLine()) {
+				query = input.nextLine().trim();
+				int defCount = dictionary.getDefinitionCount();
+				if (query.trim().isEmpty())
+					continue;
+				if (query.equals("<"))
+					query = lastQuerry;
+				lastQuerry = query;
+				if (query.startsWith("-")) {
+					query = query.replaceFirst("-", "");
+					String[] tokens = query.split("\" ");
+					if (tokens.length == 0)
+						tokens = query.split("\\s");
+					if (tokens.length == 2)
+						dictionary.removeVocabula(tokens[0].replace("\"", "").trim(), tokens[1]);
+					else
+						dictionary.removeVocabula(tokens[0].replace("\"", "").trim());
+					if (defCount != dictionary.getDefinitionCount())
+						updateCount++;
+					System.out.println(dictionary);
+					continue;
+				}
+				if (query.startsWith("::")) {
+					query = query.substring(2, query.length()).trim();
+					System.out.println(dictionary.explainVocabula(query));
+					Optional<Vocabula> queried = dictionary.getVocabula(query);
+					queried.ifPresent(ExpositorApp::pronounce);
+					continue;
+				} else if (query.startsWith(":")) {
+					query = query.substring(1, query.length()).trim();
+					System.out.println(collectionToString(dictionary.filterHeadwords(query, "i"), query));
+					continue;
+				}
 				String[] tokens = query.split("\\s{2,}|\t|\\[|\\\\");
 				Predicate<String> notEmpty = s -> !s.trim().isEmpty();
 				query = Stream.of(tokens).filter(notEmpty).map(String::trim).findFirst().orElse("");
 				boolean acceptSimilar = query.startsWith("~");
 				if (acceptSimilar) query = query.substring(1, query.length());
-				acceptSimilar |= ACCEPT_SIMILAR;
-				Optional<Vocabula> vocabula = dictionary.getVocabula(query);
+				Optional<Vocabula> vocabula = acceptSimilar ? Optional.empty() : dictionary.getVocabula(query);
 				if (!vocabula.isPresent()) {
+					acceptSimilar |= ACCEPT_SIMILAR;
 					Collection<Vocabula> vocabulas = findVocabula(query, acceptSimilar);
 					if (!vocabulas.isEmpty() && dictionary.addVocabulas(vocabulas) > 0) {
 						updateCount++;
 						System.out.printf("found:%n%s%n", collectionToString(vocabulas.stream()
-								                                                     .map(voc -> voc.headWord)
-								                                                     .distinct()
-								                                                     .collect(toList()), query));
+																					 .map(voc -> voc.headWord)
+																					 .distinct()
+																					 .collect(toList()), query));
 					} else
 						System.out.printf("No definition for \"%s\"%nMaybe %s?%n", query, getSuggestions());
 				} else {
@@ -96,16 +98,18 @@ public class ExpositorApp {
 
 				if (defCount != dictionary.getDefinitionCount())
 					System.out.println(dictionary);
-				if (updateCount % 5 == 0)
+				if (updateCount % 50 == 0)
 					Dictionary.save(dictionary, storageEn);
-			} catch (Exception e) {
-				e.printStackTrace();
-			} finally {
-				Dictionary.save(dictionary, storageEn);
+				if (updateCount % 500 == 0)
+					Dictionary.save(dictionary, storageEn.concat(".back"));
 			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			Dictionary.save(dictionary, storageEn);
+			pronouncingService.release();
 		}
-		Dictionary.save(dictionary, storageEn);
-		pronouncingService.release();
+		//Dictionary.save(dictionary, storageEn);
 	}
 
 	private static void loadDictionary() {

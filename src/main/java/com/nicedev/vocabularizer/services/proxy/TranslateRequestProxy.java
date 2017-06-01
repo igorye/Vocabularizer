@@ -24,7 +24,7 @@ public class TranslateRequestProxy extends GoogleRequestProxy {
 		String request = "";
 		try {
 			request = URLEncoder.encode(translationRequest, "UTF-8");
-			request = String.format(REQUEST_FMT.format, nextHost(), sourceLang, targetLang, request,
+			request = String.format(TTS_REQUEST_FMT.format, nextHost(), sourceLang, targetLang, request,
 					GoogleTranslateTokenGenerator.getToken(translationRequest));
 		} catch (UnsupportedEncodingException e) {
 			return requestTranslationStream(translationRequest, sourceLang, targetLang);

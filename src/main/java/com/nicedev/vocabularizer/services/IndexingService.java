@@ -28,7 +28,7 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.singleton;
 import static java.util.stream.Collectors.toSet;
 
-public class IndexingService<M> extends Service<Map<String, Collection<String>>> {
+public class IndexingService<V extends Map> extends Service<Map<String, Collection<String>>> {
 	
 	private Dictionary source;
 	private Task<Map<String, Collection<String>>> task;
@@ -163,7 +163,7 @@ public class IndexingService<M> extends Service<Map<String, Collection<String>>>
 		while (matcher.find()) HWs.add(matcher.group(1).trim());
 		Set<String> separateHWs = HWs.stream()
 				                          .flatMap(s -> stream(s.split("[,.:;/()\\s\\\\]"))
-						                                        .filter(Strings.NOT_BLANK)
+						                                        .filter(Strings::notBlank)
 						                                        .distinct())
 				                          .collect(toSet());
 		HWs.addAll(separateHWs);

@@ -1,7 +1,5 @@
 package com.nicedev.vocabularizer.services.sound;
 
-import com.nicedev.vocabularizer.services.sound.PronouncingService;
-
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.nio.file.Path;
@@ -33,13 +31,13 @@ public class PronouncingApp {
                 line = in.nextLine().trim();
                 switch (line) {
                     case "~"    : pronouncingService.switchAccent(); continue;
-                    case "!~"   : pronouncingService.resetAcent(); continue;
+                    case "!~"   : pronouncingService.resetAccent(); continue;
                     default     : spellingBuilder.append(line).append(" ");
                 }
             } catch (NoSuchElementException e) {
                 continue;
             }
-            if (spellingBuilder.length() > 200 && line.matches(".+[\\.\"\';:]") || line.matches("^\\s*$")) {
+            if (spellingBuilder.length() > 200 && line.matches(".+[.\"\';:]") || line.matches("^\\s*$")) {
                 scheduler.schedule(spellingBuilder.toString());
                 spellingBuilder.setLength(0);
             }
@@ -55,9 +53,9 @@ public class PronouncingApp {
 
     static class JobScheduler extends Thread {
 
-        private PronouncingService pronouncingService;
-        private String outFileName;
-        public static TransferQueue<String> jobQueue = new LinkedTransferQueue<>();
+        private final PronouncingService pronouncingService;
+        private final String outFileName;
+        public static final TransferQueue<String> jobQueue = new LinkedTransferQueue<>();
         private volatile boolean inputIsEmpty = false;
 
 
@@ -105,7 +103,7 @@ public class PronouncingApp {
 
     private static String getDefaultOutName(String inFileName) {
         String defaultOutFileName = inFileName.isEmpty() ? "pronunciation.mp3"
-                                            : inFileName.replaceAll("((?<=\\w+\\.)\\w+$)", "").concat("mp3");
+                                            : inFileName.replaceAll("((?<=\\w{1,255}\\.)\\w+$)", "").concat("mp3");
         Path path = Paths.get(defaultOutFileName);
         defaultOutFileName = path.getName(path.getNameCount() - 1).toString();
         return defaultOutFileName;

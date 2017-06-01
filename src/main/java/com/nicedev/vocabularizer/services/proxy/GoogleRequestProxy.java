@@ -14,26 +14,31 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 
+import static com.nicedev.util.SimpleLog.log;
+
 abstract public class GoogleRequestProxy {
 	
 	final static private String HOST_NAME_FMT = "translate.google.%s";
-	static protected ExecutorService executor;
-	protected final GTSRequest REQUEST_FMT;
-	private BlockingDeque<String> suffixes;
-	private List<String> possibleSuffixes;
+	private static ExecutorService executor;
+	final GTSRequest TTS_REQUEST_FMT;
+	private final BlockingDeque<String> relevantSuffixes;
+	private final List<String> possibleSuffixes;
 	private int next = 0;
 	private boolean interrupted;
-	private volatile boolean processSuffixes = false;
+	private volatile boolean proceedSuffixes = false;
 	
-	protected GoogleRequestProxy(GTSRequest requestFmt) {
-		REQUEST_FMT = requestFmt;
-		executor = Executors.newFixedThreadPool(10);
+	GoogleRequestProxy(GTSRequest requestFmt) {
+		TTS_REQUEST_FMT = requestFmt;
+		executor = Executors.newFixedThreadPool(10, r -> {
+			Thread thread = new Thread(r);
+			thread.setDaemon(true);
+			return thread;
+		});
 //        executor = Executors.newCachedThreadPool();
 		possibleSuffixes = Collections.synchronizedList(new ArrayList<>());
 		executor.execute(new SuffixEnumerator());
-		while (!processSuffixes) Thread.yield();
-//      while (possibleSuffixes.isEmpty()) Thread.yield();
-		suffixes = new LinkedBlockingDeque<>();
+		while (!proceedSuffixes) Thread.yield();
+		relevantSuffixes = new LinkedBlockingDeque<>();
 		enumHosts();
 		next = new Random(System.currentTimeMillis()).nextInt(50);
 	}
@@ -47,49 +52,49 @@ abstract public class GoogleRequestProxy {
 		executor.execute(new HostEnumerator());
 	}
 	
-	public void rejectRecentHost(Exception e) {
+	void rejectRecentHost(Exception e) {
 		String suffix = "";
 		if ((e instanceof SSLHandshakeException) || (e instanceof SSLProtocolException)) {
 			try {
-				suffix = suffixes.takeLast();
+				suffix = relevantSuffixes.takeLast();
 				possibleSuffixes.remove(suffix);
 			} catch (InterruptedException eTake) {
 				eTake.printStackTrace();
 			}
 		} else if (e.getMessage().contains("503")) try {
-			suffixes.takeLast();
+			relevantSuffixes.takeLast();
 		} catch (InterruptedException eTake) {
 			eTake.printStackTrace();
 		}
-		if (suffixes.size() <= 3)
+		if (relevantSuffixes.size() <= 3)
 			enumHosts();
-		System.out.printf("[%d] | %s%n", suffixes.size(), e.getCause().getMessage());
+		log("[%d] | %s%n", relevantSuffixes.size(), e.getCause().getMessage());
 	}
 	
-	protected String nextHost() {
-		while (suffixes.isEmpty()) Thread.yield();
+	String nextHost() {
+		while (relevantSuffixes.isEmpty()) Thread.yield();
 		String suffix = "com";
 		try {
-			suffix = suffixes.take();
-			suffixes.put(suffix);
+			suffix = relevantSuffixes.take();
+			relevantSuffixes.put(suffix);
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			log("%s %s", e.getMessage(), e.getCause());
 		}
 		return String.format(HOST_NAME_FMT, suffix);
 	}
 	
-	protected HttpURLConnection getRequestConnection(String request) throws IOException {
+	HttpURLConnection getRequestConnection(String request) throws IOException {
 		URL url = new URL(request);
 		return request.startsWith("https") ? (HttpsURLConnection) url.openConnection()
 				       : (HttpURLConnection) url.openConnection();
 	}
 	
-	protected void prepareConnProps(HttpURLConnection conn) {
+	void prepareConnProps(HttpURLConnection conn) {
 		conn.setRequestProperty("Referer", "https://translate.google.com/");
 		try {
 			conn.setRequestMethod("GET");
 		} catch (ProtocolException e) {
-			e.printStackTrace();
+			log("%s %s", e.getMessage(), e.getCause());
 		}
 		conn.setRequestProperty("User-Agent", /*"Chrome/54.0.2840.59"*/"stagefright/1.2 (Linux;Android 5.0)");
 		conn.setRequestProperty("Accept-Charset", "UTF-8");
@@ -98,6 +103,7 @@ abstract public class GoogleRequestProxy {
 	}
 	
 	class AddrTester implements Runnable {
+		
 		private String domainSuffix;
 		
 		public AddrTester(String domainSuffix) {
@@ -107,8 +113,8 @@ abstract public class GoogleRequestProxy {
 		private boolean isValidDomainSuffix() throws UnknownHostException {
 			Thread.yield();
 			String hostName = String.format(GoogleRequestProxy.HOST_NAME_FMT, domainSuffix);
-			InetAddress hostAddr = InetAddress.getByName(hostName);
-			return !hostAddr.getHostName().isEmpty();
+			InetAddress hostAddress = InetAddress.getByName(hostName);
+			return !hostAddress.getHostName().isEmpty();
 		}
 		
 		private boolean connectionAvailable() throws IOException {
@@ -126,26 +132,23 @@ abstract public class GoogleRequestProxy {
 		public void run() {
 			boolean appendCOM = false;
 			try {
-				if (isValidDomainSuffix() && connectionAvailable())
-					suffixes.add(domainSuffix);
-			} catch (IOException e) {
-				appendCOM = true;
-			}
+				if (isValidDomainSuffix() && connectionAvailable()) relevantSuffixes.add(domainSuffix);
+			} catch (IOException e) { appendCOM = true; }
 			if (appendCOM)
 				try {
 					domainSuffix = "com." + domainSuffix;
-					if (isValidDomainSuffix() && connectionAvailable())
-						suffixes.add(domainSuffix);
-					
-				} catch (IOException e) {
-				}
+					if (isValidDomainSuffix() && connectionAvailable()) relevantSuffixes.add(domainSuffix);
+				} catch (IOException e) { /* NOP */ }
 		}
 		
 	}
 	
 	class SuffixEnumerator implements Runnable {
+		
+		public static final String LOWER_CASE_ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+		
 		public void run() {
-			final char[] chars = "abcdefghijklmnopqrstuvwxyz".toCharArray();
+			final char[] chars = LOWER_CASE_ALPHABET.toCharArray();
 			StringBuilder domainSuffix = new StringBuilder();
 			for (char a : chars)
 				for (char b : chars) {
@@ -153,7 +156,7 @@ abstract public class GoogleRequestProxy {
 					domainSuffix.append(a).append(b);
 					possibleSuffixes.add(domainSuffix.toString());
 				}
-			processSuffixes = true;
+			proceedSuffixes = true;
 		}
 	}
 	

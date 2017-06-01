@@ -131,7 +131,7 @@ public class WebTabPane extends TabPane {
 		return tryWithTab(0, tabPredicate, perform, true);
 	}
 	
-	public int tryWithTab(int startIndex, Predicate<Tab> tabPredicate, Consumer<Tab> perform, boolean forEach) {
+	private int tryWithTab(int startIndex, Predicate<Tab> tabPredicate, Consumer<Tab> perform, boolean forEach) {
 		Collection<Tab> tabs = getTabs().stream()
 				                       .skip(startIndex)
 				                       .filter(tabPredicate)

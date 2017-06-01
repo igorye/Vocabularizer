@@ -1,4 +1,4 @@
-package com.nicedev.vocabularizer.dictionary;
+	package com.nicedev.vocabularizer.dictionary;
 
 import java.io.Serializable;
 import java.util.*;
@@ -8,14 +8,17 @@ import static java.util.stream.Collectors.joining;
 
 public class Definition implements Serializable, Comparable{
 	
+	private static final String EXPLANATION_PREFIX_REFERENCE = "see ";
+	public static final String EXPLANATION_PREFIX_FORM = "form of ";
 	private static final long serialVersionUID = 2408653327252231176L;
 
 	public final Language language;
 	public final String explanation;
-	protected Map.Entry<Vocabula, PartOfSpeech> defines;
+	protected final Vocabula definedVocabula;
+	protected final PartOfSpeech definedPartOfSpeech;
 	private String identicalTo;
-	private Set<String> useCases;
-	private Set<String> synonyms;
+	private final Set<String> useCases;
+	private final Set<String> synonyms;
 
 	private boolean hasAccordance;
 
@@ -24,7 +27,8 @@ public class Definition implements Serializable, Comparable{
 		this.language = lang;
 		synonyms = new TreeSet<>();
 		useCases = new LinkedHashSet<>();
-		this.defines = new AbstractMap.SimpleEntry<>(vocabula, partOfSpeech);
+		definedVocabula = vocabula;
+		definedPartOfSpeech = partOfSpeech;
 	}
 
 	public Definition(Language lang, Vocabula vocabula, PartOfSpeech partOfSpeech) {
@@ -34,11 +38,10 @@ public class Definition implements Serializable, Comparable{
 	public Definition(Definition definition, Vocabula voc, PartOfSpeech pOS) {
 		language = definition.language;
 		explanation = definition.explanation;
-		defines = new AbstractMap.SimpleEntry<>(voc, pOS);
-//		useCases = new LinkedHashSet<>(definition.getUseCases());
-//		synonyms = new TreeSet<>(definition.getUseCases());
-		useCases = definition.useCases;
-		synonyms = definition.synonyms;
+		useCases = new LinkedHashSet<>(definition.useCases);
+		synonyms = new TreeSet<>(definition.synonyms);
+		definedVocabula = voc;
+		definedPartOfSpeech = pOS;
 	}
 
 	public void addUseCase(String useCase) {
@@ -54,7 +57,7 @@ public class Definition implements Serializable, Comparable{
 	}
 
 	public void removeSynonym(String headWord) {
-//		synonyms.add(definition);
+		synonyms.removeIf(s -> s.equals(headWord));
 	}
 
 //	public Set<Definition> getSynonyms() {
@@ -68,12 +71,12 @@ public class Definition implements Serializable, Comparable{
 		return Collections.unmodifiableSet(useCases);
 	}
 
-	public void assignTo(String entry) {
+	/*public void assignTo(String entry) {
 		if( Language.charsMatchLanguage(entry, language)) {
 			identicalTo = entry;
 			hasAccordance = true;
 		}
-	}
+	}*/
 
 	@Override
 	public int compareTo(Object o) {
@@ -109,9 +112,9 @@ public class Definition implements Serializable, Comparable{
 		StringBuilder res = new StringBuilder();
 		if (explanation.length() != 0)
 			res.append(String.format("    - %s", explanation.replaceAll("<b>", "<").replaceAll("</b>", ">")));
-		else if (identicalTo != null)
-			res.append(String.format("    - see <%s>", identicalTo.replaceAll("<b>", "<").replaceAll("</b>", ">")));
-		if (!synonyms.isEmpty())
+		/*else if (identicalTo != null)
+			res.append(String.format("    - see <%s>", identicalTo.replaceAll("<b>", "<").replaceAll("</b>", ">")));*/
+		if (!synonyms.isEmpty() && !explanationIsSynonymReference())
 			res.append(String.format("\n      synonym%s: ", synonyms.size() > 1 ? "s" : ""))
 					.append(synonyms.stream()
 							        .map(this::emphasizeSynonym)
@@ -126,7 +129,11 @@ public class Definition implements Serializable, Comparable{
 		res.append("\n");
 		return res.toString();
 	}
-
+	
+	private boolean explanationIsSynonymReference() {
+		return synonyms.stream().allMatch(explanation::contains);
+	}
+	
 	public String toHTML() {
 		StringBuilder res = new StringBuilder();
 		if (explanation.length() != 0) {
@@ -134,16 +141,15 @@ public class Definition implements Serializable, Comparable{
 			res.append(String.format("<div class=\"definition\"><table><tr><td>-</td>" +
 					                         "<td class=\"definition\">%s</td></tr></table>", decoratedExpl));
 		}
-		else if (identicalTo != null)
+		/*else if (identicalTo != null)
 			res.append(String.format("<div class=\"definition\"><table><tr><td>-</td>" +
-					                         "<td class=\"definition\">see:<b>%s</b></td></tr></table>", identicalTo));
-		if (!synonyms.isEmpty()){
+					                         "<td class=\"definition\">see:<b>%s</b></td></tr></table>", identicalTo));*/
+		if (!synonyms.isEmpty() && !explanationIsSynonymReference()){
 			res.append(String.format("\n<div class=\"synonym\">synonym%s: ", synonyms.size() > 1 ? "s" : ""))
 					.append(synonyms.stream()
 										.map(this::emphasizeSynonym)
 										.collect(joining(", ")))
 					.append("</div>\n");
-					//.append("<b>").append(synonyms.stream().collect(joining("</b>, <b>"))).append("</b></div>\n");
 		}
 		if (!useCases.isEmpty()){
 			res.append("\n<div><table><tr><td></td><td class=\"usecase\">")
@@ -162,11 +168,11 @@ public class Definition implements Serializable, Comparable{
 	}
 	
 	public Vocabula getDefinedVocabula() {
-		return defines.getKey();
+		return definedVocabula;
 	}
 	
 	public PartOfSpeech getDefinedPartOfSpeech() {
-		return defines.getValue();
+		return definedPartOfSpeech;
 	}
 	
 	/*public String toXML() {
@@ -185,4 +191,9 @@ public class Definition implements Serializable, Comparable{
 		}
 		return res.toString();
 	}*/
+	
+	boolean isInessential() {
+		String prefixMatch = String.format("^(%s|%s).*", EXPLANATION_PREFIX_REFERENCE, EXPLANATION_PREFIX_FORM);
+		return explanation.matches(prefixMatch);
+	}
 }

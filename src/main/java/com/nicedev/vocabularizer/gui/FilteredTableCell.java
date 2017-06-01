@@ -13,7 +13,7 @@ import static com.nicedev.util.SimpleLog.log;
 import static java.util.Optional.ofNullable;
 
 public class FilteredTableCell extends TableCell<String, String> {
-	private StringProperty filter;
+	private final StringProperty filter;
 	
 	public FilteredTableCell(StringProperty filter) {
 		this.filter = filter;

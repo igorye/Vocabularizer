@@ -10,8 +10,8 @@ import java.util.regex.Pattern;
 public class Language implements Serializable, Comparable {
 	
 	private static final long serialVersionUID = 6763466261152320139L;
-	public static String ENGLISH_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-	public static String RUSSIAN_ALPHABET = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯабвгдеёжзийклмнопрстуфхцчшщьыъэюя0123456789";
+	public static final String ENGLISH_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+	public static final String RUSSIAN_ALPHABET = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЬЫЪЭЮЯабвгдеёжзийклмнопрстуфхцчшщьыъэюя0123456789";
 	private static Map<String, Language> langs;
 
 	static {
@@ -26,16 +26,48 @@ public class Language implements Serializable, Comparable {
 	public final String shortName;
 	public final String alphabet;
 	final public Map<String, PartOfSpeech> partsOfSpeech;
-
+	
 	public Language(String langName, String shortName, String alphabet) {
 		this.langName = langName;
 		this.shortName = shortName;
 		this.alphabet = alphabet;
 		langs.put(this.langName, this);
-
+		
+		repairPoS();
 		partsOfSpeech = loadPartsOfSpeech();
 	}
-
+	
+	private void repairPoS() {
+		final String USER_HOME = System.getProperties().getProperty("user.home");
+		final String PROJECT_HOME = System.getProperties().getProperty("Vocabularizer.home", USER_HOME + "\\vocabularizer");
+		Properties langProps = new Properties();
+		Map<String, PartOfSpeech> partsOS = new TreeMap<>();
+		try (InputStream in = new FileInputStream(new File(PROJECT_HOME, String.format("%s.properties", langName)))) {
+			langProps.loadFromXML(in);
+			int nPoS = 0;
+			String PoSName;
+			while ((PoSName = langProps.getProperty(String.format("name%d", ++nPoS))) != null) {
+				int len = Math.min(3, PoSName.length());
+				if (!PoSName.contains(";")) {
+					partsOS.put(PoSName, new PartOfSpeech(this, PoSName, PoSName.substring(0, len)));
+				}
+			}
+			partsOS.put(PartOfSpeech.ANY, new PartOfSpeech(this, PartOfSpeech.ANY));
+			partsOS.put(PartOfSpeech.UNDEFINED, new PartOfSpeech(this, PartOfSpeech.UNDEFINED));
+			partsOS.put(PartOfSpeech.COMPOSITE, new PartOfSpeech(this, PartOfSpeech.COMPOSITE));
+		} catch (IOException e) {
+			System.err.format("Unable to read language configuration. %s.properties file is corrupt or missing at" +
+					                  " %s. %n", langName, PROJECT_HOME);
+		}
+		final int[] i = {1};
+		partsOS.keySet().forEach( p -> langProps.put(String.format("name%d", i[0]++),p));
+		try (OutputStream out = new FileOutputStream(new File(PROJECT_HOME, String.format("%s.properties", langName)))) {
+			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
+		} catch (IOException e) {
+			System.err.format("Unable to write language configuration to %s\\%s.properties%n",  PROJECT_HOME, langName );
+		}
+	}
+	
 	public Language(String langName, String shortName) {
 		this(langName, shortName, langs.get(langName).alphabet);
 	}
@@ -85,9 +117,10 @@ public class Language implements Serializable, Comparable {
 
 	private Map<String, PartOfSpeech> loadPartsOfSpeech() {
 		Properties langProps = new Properties();
-		String home = System.getProperties().getProperty("user.home");
 		Map<String, PartOfSpeech> partsOS = new TreeMap<>();
-		try (InputStream in = new FileInputStream(new File(home, String.format("%s.properties", langName)))) {
+		String userHome = System.getProperties().getProperty("user.home");
+		String projectHome = System.getProperties().getProperty("Vocabularizer.home", userHome + "\\vocabularizer");
+		try (InputStream in = new FileInputStream(new File(projectHome, String.format("%s.properties", langName)))) {
 			langProps.loadFromXML(in);
 			int nPoS = 0;
 			String PoSName;
@@ -100,23 +133,24 @@ public class Language implements Serializable, Comparable {
 			partsOS.put(PartOfSpeech.COMPOSITE, new PartOfSpeech(this, PartOfSpeech.COMPOSITE));
 		} catch (IOException e) {
 			System.err.format("Unable to read language configuration. %s.properties file is corrupt or missing at" +
-					                  " %s. %n", langName, home);
+					                  " %s. %n", langName, projectHome);
 		}
 		return partsOS;
 	}
 
-	private boolean savePartsOfSpeech() {
+	private void savePartsOfSpeech() {
 		Properties langProps = new Properties();
 		final int[] i = {1};
-		partsOfSpeech.keySet().forEach( p -> langProps.put(String.format("name%d", i[0]++),p));
-		String home = System.getProperties().getProperty("user.home");
-//		Map<String, PartOfSpeech> partsOS = new TreeMap<>();
-		try (OutputStream out = new FileOutputStream(new File(home, String.format("%s.properties", langName)))) {
+		synchronized(partsOfSpeech) {
+			partsOfSpeech.keySet().forEach( p -> langProps.put(String.format("name%d", i[0]++),p));
+		};
+		String userHome = System.getProperties().getProperty("user.home");
+		String projectHome = System.getProperties().getProperty("Vocabularizer.home", userHome + "\\vocabularizer");
+		try (OutputStream out = new FileOutputStream(new File(projectHome, String.format("%s.properties", langName)))) {
 			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
 		} catch (IOException e) {
-			System.err.format("Unable to write language configuration to %s\\%s.properties%n",  home, langName );
+			System.err.format("Unable to write language configuration to %s\\%s.properties%n",  projectHome, langName );
 		}
-		return true;
 	}
 
 	@Override
@@ -124,8 +158,7 @@ public class Language implements Serializable, Comparable {
 		if (this == o) return true;
 		if (o == null || getClass() != o.getClass()) return false;
 		Language language = (Language) o;
-		if (!langName.equalsIgnoreCase(language.langName)) return false;
-		return alphabet.equals(language.alphabet);
+		return langName.equalsIgnoreCase(language.langName) && alphabet.equals(language.alphabet);
 	}
 
 	@Override
@@ -151,10 +184,15 @@ public class Language implements Serializable, Comparable {
 
 	public PartOfSpeech getPartOfSpeech(String partOfSpeechName) {
 		if (partOfSpeechName.isEmpty()) return new PartOfSpeech(this, PartOfSpeech.UNDEFINED);
-		PartOfSpeech partOfSpeech =
+		PartOfSpeech partOfSpeech = null;
+		synchronized(partsOfSpeech) {
+			partOfSpeech = partsOfSpeech.computeIfAbsent(partOfSpeechName, s->
+														 new PartOfSpeech(this, partOfSpeechName));
+		}
+		/*PartOfSpeech partOfSpeech =
 				partsOfSpeech.getOrDefault(partOfSpeechName,
 						new PartOfSpeech(this, partOfSpeechName));
-		partsOfSpeech.putIfAbsent(partOfSpeechName, partOfSpeech);
+		partsOfSpeech.putIfAbsent(partOfSpeechName, partOfSpeech);*/
 		savePartsOfSpeech();
 		return partOfSpeech;
 	}

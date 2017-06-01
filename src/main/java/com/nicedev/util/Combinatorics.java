@@ -13,7 +13,7 @@ public class Combinatorics {
 	
 	private static final int ARRAY_LIST_MAX_CAPACITY = Integer.MAX_VALUE - 8;
 	
-	static long factorial(int n) {
+	public static long factorial(int n) {
 		if (n <= 0) return 0;
 		if (n == 1) return 1;
 		long result = 1;
@@ -24,14 +24,14 @@ public class Combinatorics {
 		return result;
 	}
 	// start * (start+1)* .. * (end - 1)* end
-	static long getRangeProduct(int rangeStart, int rangeEnd) {
+	public static long getRangeProduct(int rangeStart, int rangeEnd) {
 		if (rangeStart >= rangeEnd) throw new IllegalArgumentException();
 		if (rangeStart <= 0 && rangeEnd >=0) return 0;
 		return LongStream.rangeClosed(rangeStart, rangeEnd).reduce(1, (left, right) -> left * right);
 	}
 	
 	// n! / ((n-m)! * m!) == (n-m+1)*..*(n-1)*n / m!
-	static long getUniqueCombinationsCount(int n, int m) {
+	public static long getUniqueCombinationsCount(int n, int m) {
 		checkArgs(n, m);
 		return getRangeProduct(n - m + 1, n) / factorial(m);
 	}
@@ -152,7 +152,7 @@ public class Combinatorics {
 		return combinations;
 	}
 	
-	public static<T> void forEachUniqueCombination(Collection<T> inputSet, int bySize, Consumer<Collection<T>> consumer) {
+	public static <T> void forEachUniqueCombination(Collection<T> inputSet, int bySize, Consumer<Collection<T>> consumer) {
 		List<T> currentSubset = new ArrayList<>(inputSet.stream().limit(bySize).collect(Collectors.toList()));
 		forEachUniqueCombination(inputSet, bySize, 0, currentSubset, consumer);
 	}

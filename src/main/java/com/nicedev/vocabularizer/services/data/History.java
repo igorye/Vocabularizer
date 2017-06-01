@@ -3,9 +3,9 @@ package com.nicedev.vocabularizer.services.data;
 import java.util.*;
 
 public class History<T> {
-	private List<T> list = new LinkedList<>();
+	private final List<T> list = new LinkedList<>();
 	private int current = 0;
-	private int capacity;
+	private final int capacity;
 
 	public History(int capacity) {
 		this.capacity = capacity;

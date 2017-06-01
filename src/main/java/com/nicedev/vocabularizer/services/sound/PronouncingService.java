@@ -15,24 +15,26 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static com.nicedev.util.SimpleLog.log;
+
 
 public class PronouncingService extends Thread {
 	final static private String[] accents = {"GB", "US"};
 	static volatile private boolean interrupted = false;
 	private final TTSRequestProxy requestProxy;
 	private final boolean showDebug;
-	private ExecutorService executor = Executors.newSingleThreadExecutor();
-	private CachingAgent cAgent;
-	private BlockingQueue<PronunciationData> pronouncingQueue;
-	private BlockingQueue<PronunciationData> saveQueue;
-	private BlockingQueue<PronunciationData> cacheQueue;
-	private Map<PronunciationData, byte[]> cache;
+	private final ExecutorService saveExecutor = Executors.newSingleThreadExecutor();
+	private final CachingAgent cAgent;
+	private final BlockingQueue<PronunciationData> pronouncingQueue;
+	private final BlockingQueue<PronunciationData> saveQueue;
+	private final BlockingQueue<PronunciationData> cacheQueue;
+	private final Map<PronunciationData, byte[]> cache;
 	private boolean isLimited = false;
 	volatile private int pronunciationLimit = 0;
 	volatile private int saveLimit = 0;
-	private boolean owerloadAccent = false;
+	private boolean overloadAccent = false;
 	private int accent = 0;
-	private Map<String, PronunciationSaver> savers;
+	private final Map<String, PronunciationSaver> savers;
 	private boolean hasInput = true;
 	private StopableSoundPlayer activePlayer = new AudioController();
 	private volatile boolean stoppedPlaying = false;
@@ -83,8 +85,8 @@ public class PronouncingService extends Thread {
 		return res;
 	}
 
-	//pronounce .wav file at specified source
-	public void pronounceURL(PronunciationData pronunciationData) {
+	// pronounce wav file at specified source
+	private void pronounceURL(PronunciationData pronunciationData) {
 		try (InputStream requestStream = requestProxy.requestPronunciationStream(pronunciationData);
 		     AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(requestStream)) {
 			Clip clip = AudioSystem.getClip();
@@ -94,7 +96,7 @@ public class PronouncingService extends Thread {
 				clip.start();
 			clip.addLineListener(clipStopHandler(clip));
 		} catch (IOException | UnsupportedAudioFileException | LineUnavailableException | NullPointerException e) {
-//			System.err.println("URLspeller interrupted");
+			log("URLspeller interrupted");
 		}
 	}
 	
@@ -106,8 +108,8 @@ public class PronouncingService extends Thread {
 		};
 	}
 	
-	//pronounce mp3 stream requested from TTS service
-	public void pronounceGTTS(PronunciationData pronunciationData) {
+	// pronounce mp3 stream requested from TTS service
+	private void pronounceGTTS(PronunciationData pronunciationData) {
 		if(isLimited)
 			interrupted = pronunciationLimit-- <= 0;
 		try (InputStream pronunciationStream = new ByteArrayInputStream(cache.get(pronunciationData))){
@@ -119,8 +121,8 @@ public class PronouncingService extends Thread {
 			Thread.sleep(pronunciationData.delayAfter);
 			cache.remove(pronunciationData);
 		} catch (JavaLayerException | IOException | InterruptedException | NullPointerException e) {
-//			System.err.printf("GTTS interrupted");
-			System.err.printf("data recieved %s%n", pronunciationData.pronunciationSource);
+			log("GTTS interrupted");
+			log("data recieved on exception == %s%n", pronunciationData.pronunciationSource);
 		}
 	}
 
@@ -129,22 +131,23 @@ public class PronouncingService extends Thread {
 	}
 
 	public void pronounce(String wordsToPronounce, int delay) {
+		if (wordsToPronounce.trim().isEmpty()) return;
 		stoppedPlaying = false;
 		try {
-			String accent = wordsToPronounce.contains("://") ? null : accents[this.accent % accents.length];
+			String accent = wordsToPronounce.contains("://") ? null : getActualAccent();
 			for(String words: split(wordsToPronounce, "\n", 0))
 				pronouncingQueue.put(new PronunciationData(words, accent, delay, 98));
 		} catch (InterruptedException e) {
 			interrupted = true;
 			stoppedPlaying = true;
-//			System.err.println("pronounce interrupted");
+			log("pronounce interrupted");
 		}
 	}
 
 	public void save(String toPronounce, String outFileName) {
 		if (!savers.containsKey(outFileName)) {
 			PronunciationSaver saver = new PronunciationSaver(outFileName);
-			executor.execute(saver);
+			saveExecutor.execute(saver);
 			savers.putIfAbsent(outFileName, saver);
 		} else
 			savers.get(outFileName).save(toPronounce);
@@ -152,12 +155,12 @@ public class PronouncingService extends Thread {
 
 	public void switchAccent() {
 		accent++;
-		owerloadAccent = true;
+		overloadAccent = true;
 	}
 
-	public void resetAcent() {
+	public void resetAccent() {
 		accent = 0;
-		owerloadAccent = false;
+		overloadAccent = false;
 	}
 
 	public void release() {
@@ -182,7 +185,7 @@ public class PronouncingService extends Thread {
 	}
 
 	public void run() {
-		while (!interrupted && (!cacheQueue.isEmpty() || !pronouncingQueue.isEmpty() || hasInput)) {
+		while (!interrupted && hasSomeData()) {
 			try {
 				PronunciationData toPronounce = cacheQueue.take();
 				if (!stoppedPlaying)
@@ -202,6 +205,10 @@ public class PronouncingService extends Thread {
 		requestProxy.release();
 	}
 	
+	private boolean hasSomeData() {
+		return hasInput || !cacheQueue.isEmpty() || !pronouncingQueue.isEmpty();
+	}
+	
 	private class CachingAgent extends Thread {
 		
 		CachingAgent() {
@@ -210,26 +217,22 @@ public class PronouncingService extends Thread {
 		}
 		
 		public void run() {
-			PronunciationData pronunciationData = new PronunciationData(null, null, 0, 0);
+			PronunciationData pData = null;
 			while (!interrupted)
 				try {
-					pronunciationData = pronouncingQueue.take();
-//					System.err.println("cacheer took data");
-					if (owerloadAccent) pronunciationData =
-							                    new PronunciationData(pronunciationData.pronunciationSource,
-									                                         accents[accent % accents.length],
-									                                         pronunciationData.delayAfter,
-									                                         pronunciationData.limitPercent);
-					cache.put(pronunciationData, cacheFromInputStream(
-							requestProxy.requestPronunciationStream(pronunciationData),
-							pronunciationData.limitPercent));
-					cacheQueue.put(pronunciationData);
-//					System.err.printf("(%d, %d)%n", cacheQueue.size(), cache.size());
+					pData = pronouncingQueue.take();
+					if (overloadAccent) pData = new PronunciationData(pData.pronunciationSource,
+							                                                 getActualAccent(),
+							                                                 pData.delayAfter,
+							                                                 pData.limitPercent);
+					cache.put(pData,
+										cacheFromInputStream(requestProxy.requestPronunciationStream(pData), pData.limitPercent));
+					cacheQueue.put(pData);
 				} catch (InterruptedException e) {
-//					System.err.println("cacheer interrupted");
+					log("Caching agent interrupted");
 					break;
 				} catch (IOException e) {
-					System.err.println("failed to cache " + pronunciationData.pronunciationSource);
+					log("failed to cache %s", pData.pronunciationSource);
 				}
 		}
 		
@@ -246,24 +249,40 @@ public class PronouncingService extends Thread {
 		}
 	}
 	
+	private String getActualAccent() {
+		return accents[PronouncingService.this.accent % accents.length];
+	}
+	
 	class PronunciationSaver implements Runnable {
 		private BufferedOutputStream out;
-//		private String outFileName;
+		private final String defaultOutFileName;
+		private String actualOutputFileName;
 		
 		PronunciationSaver(String outFileName) {
-//			this.outFileName = outFileName;
+			this.defaultOutFileName = outFileName;
 			try {
-				out = new BufferedOutputStream(Files.newOutputStream(Paths.get(outFileName),
-						StandardOpenOption.CREATE, StandardOpenOption.APPEND));
+				out = openBufferedOutputStream(outFileName);
 			} catch (IOException e) {
-				e.printStackTrace();
+				log("%s %s", e.getMessage(), e.getCause());
 			}
+		}
+		
+		private BufferedOutputStream openBufferedOutputStream(String outFileName) throws IOException {
+			return new BufferedOutputStream(Files.newOutputStream(Paths.get(outFileName),
+					StandardOpenOption.CREATE, StandardOpenOption.APPEND));
 		}
 		
 		public void save(String wordsToPronounce) {
 			try {
-				PronunciationData pronunciationData = new PronunciationData(wordsToPronounce, accents[accent % accents.length], 0, 100);
-				saveQueue.put(pronunciationData);
+				saveQueue.put(new PronunciationData(wordsToPronounce, getActualAccent(), defaultOutFileName, 0, 100));
+			} catch (InterruptedException e) {
+				interrupted = true;
+			}
+		}
+		
+		public void save(String wordsToPronounce, String outFileName) {
+			try {
+				saveQueue.put(new PronunciationData(wordsToPronounce, getActualAccent(), outFileName, 0, 100));
 			} catch (InterruptedException e) {
 				interrupted = true;
 			}
@@ -277,7 +296,7 @@ public class PronouncingService extends Thread {
 				try {
 					pronunciationData = saveQueue.take();
 				} catch (InterruptedException e) {
-					e.printStackTrace();
+					log("%s %s", e.getMessage(), e.getCause());
 				}
 				byte[] cache = new byte[4096];
 				try (InputStream in = requestProxy.requestPronunciationStream(pronunciationData);
@@ -287,21 +306,32 @@ public class PronouncingService extends Thread {
 						baoStream.write(cache, 0, read);
 					cache = baoStream.toByteArray();
 				} catch (IOException | NullPointerException eIn) {
-					eIn.printStackTrace();
+					log(eIn.getMessage() + eIn.getCause());
 				}
 				try {
+					ensureOutputTarget(pronunciationData);
 					out.write(cache, 0, cache.length);
-					System.err.println(pronunciationData);
+					log("%s", pronunciationData);
 				} catch (IOException eOut) {
+					log(eOut.getMessage() + eOut.getCause());
 					interrupted = true;
 				}
 			}
 			try {
 				out.close();
 			} catch (IOException e) {
-				e.printStackTrace();
+				log("%s %s", e.getMessage(), e.getCause());
 			}
 		}
+		
+		private void ensureOutputTarget(PronunciationData pronunciationData) throws IOException {
+			if (!pronunciationData.outFileName.equals(actualOutputFileName)) {
+				out.close();
+				out = openBufferedOutputStream(pronunciationData.outFileName);
+				actualOutputFileName = pronunciationData.outFileName;
+			}
+		}
+		
 	}
-
+	
 }

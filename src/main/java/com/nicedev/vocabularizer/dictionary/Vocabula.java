@@ -4,16 +4,17 @@ import java.io.Serializable;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static java.util.stream.Collectors.joining;
+import static java.util.stream.Collectors.*;
 
 public class Vocabula implements Serializable, Comparable {
 	
 	private static final long serialVersionUID = 7318719810956065533L;
+	
 	final public String headWord;
 	public final boolean isComposite;
 	private final Language language;
-	private Map<PartOfSpeech, Set<Definition>> mapPOS;
-	private Map<PartOfSpeech, Set<String>> knownForms;
+	private final Map<PartOfSpeech, Set<Definition>> mapPOS;
+	private final Map<PartOfSpeech, Set<String>> knownForms;
 	private String transcription;
 	private Set<String> pronunciations;
 	private Vocabula identicalTo;
@@ -43,49 +44,47 @@ public class Vocabula implements Serializable, Comparable {
 		this(charSeq, lang, "");
 	}
 	
-	public boolean addPartOfSpeech(String partOfSpeechName, String meaning) {
+	/*public boolean addDefinition(String partOfSpeechName, String meaning) {
 		PartOfSpeech pos = language.getPartOfSpeech(partOfSpeechName);
-		Set<Definition> definitions = mapPOS.getOrDefault(pos, new LinkedHashSet<>());
-		mapPOS.putIfAbsent(pos, definitions);
+		Set<Definition> definitions = mapPOS.computeIfAbsent(pos, partOfSpeech -> new LinkedHashSet<>());
 		return definitions.add(new Definition(language, this, pos, meaning));
-	}
+	}*/
 	
-	public boolean addPartOfSpeech(String partOfSpeechName, Definition definition) {
+	/*public boolean addDefinition(String partOfSpeechName, Definition definition) {
 		PartOfSpeech pos = language.getPartOfSpeech(partOfSpeechName);
 		Set<Definition> definitions = mapPOS.getOrDefault(pos, new LinkedHashSet<>());
 		mapPOS.putIfAbsent(pos, definitions);
 		return definitions.add(new Definition(definition, this, pos));
+	}*/
+	
+	/*public void addDefinition(String partOfSpeechName, Definition definition) {
+		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
+		addDefinition(partOfSpeech, definition);
+	}*/
+	
+	public void addDefinition(PartOfSpeech partOfSpeech, Definition definition) {
+		language.getPartOfSpeech(partOfSpeech.partName);
+		Set<Definition> definitions = mapPOS.computeIfAbsent(partOfSpeech, pos -> new LinkedHashSet<>());
+		definitions.add(definition);
 	}
 	
-	public void addPartsOfSpeech(Vocabula newVoc) {
+	/*public void addPartsOfSpeech(Vocabula newVoc) {
 		newVoc.mapPOS.keySet().forEach(pos -> addDefinitions(pos, newVoc.mapPOS.get(pos)));
-	}
+	}*/
 	
-	public void addPronunciation(String source) {
+	
+	/*public void addPronunciation(String source) {
 		if (pronunciations == null) initPronunciations();
 		pronunciations.add(source);
-	}
+	}*/
 	
 	public void addPronunciations(Collection<String> pronunciationSources) {
 		if (pronunciations == null) initPronunciations();
 		pronunciations.addAll(pronunciationSources);
 	}
 	
-	
 	private void initPronunciations() {
 		pronunciations = new LinkedHashSet<>();
-	}
-	
-	public void addDefinition(PartOfSpeech partOfSpeech, Definition definition) {
-		language.getPartOfSpeech(partOfSpeech.partName);
-		Set<Definition> defs = mapPOS.getOrDefault(partOfSpeech, new LinkedHashSet<>());
-		defs.add(definition);
-		mapPOS.putIfAbsent(partOfSpeech, defs);
-	}
-	
-	public void addDefinition(String partOfSpeechName, Definition definition) {
-		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
-		addDefinition(partOfSpeech, definition);
 	}
 	
 	public void removeDefinition(String partName, String explanation) {
@@ -93,26 +92,25 @@ public class Vocabula implements Serializable, Comparable {
 		mapPOS.get(partOfSpeech).removeIf(def -> def.explanation.equals(explanation));
 	}
 	
-	public void addDefinitions(String partOfSpeechName, Set<Definition> definitions) {
+	/*public void addDefinitions(String partOfSpeechName, Set<Definition> definitions) {
 		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
 		addDefinitions(partOfSpeech, definitions);
+	}*/
+	
+	public void addDefinitions(PartOfSpeech partOfSpeech, Set<Definition> newDefinitions) {
+		Set<Definition> definitions = mapPOS.computeIfAbsent(partOfSpeech, PoS -> new LinkedHashSet<>());
+		newDefinitions.forEach(definition -> definitions.add(new Definition(definition, this, partOfSpeech)));
 	}
 	
-	public void addDefinitions(PartOfSpeech partOfSpeech, Set<Definition> definitions) {
-		Set<Definition> defs = mapPOS.getOrDefault(partOfSpeech, new LinkedHashSet<>());
-		defs.addAll(definitions);
-		mapPOS.putIfAbsent(partOfSpeech, defs);
-	}
-	
-	public void addDefinitions(Vocabula vocabula) {
-		if (!headWord.equals(vocabula.headWord)) return;
-		vocabula.mapPOS.keySet().forEach(pos -> mapPOS.putIfAbsent(pos, vocabula.mapPOS.get(pos)));
-	}
-	
-	public void removeDefinitions(String partName, List<String> explanations) {
+	public void removeDefinitions(String partName, Set<String> explanations) {
 		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partName);
 		mapPOS.get(partOfSpeech).removeIf(def -> explanations.contains(def.explanation));
 	}
+	
+	/*public void addDefinitions(Vocabula vocabula) {
+		if (!headWord.equals(vocabula.headWord)) return;
+		vocabula.mapPOS.keySet().forEach(pos -> mapPOS.putIfAbsent(pos, vocabula.mapPOS.get(pos)));
+	}*/
 	
 	public boolean removePartOfSpeech(String partOfSpeechName) {
 		return mapPOS.remove(language.getPartOfSpeech(partOfSpeechName)) != null;
@@ -161,9 +159,9 @@ public class Vocabula implements Serializable, Comparable {
 		return result;
 	}
 	
-	public boolean hasAccordance() {
+	/*public boolean hasAccordance() {
 		return identicalTo != null;
-	}
+	}*/
 	
 	public String getTranscription() {
 		return transcription;
@@ -182,9 +180,9 @@ public class Vocabula implements Serializable, Comparable {
 		return mapPOS.values().stream().mapToInt(Set::size).sum();
 	}
 	
-	public int getFormCount() {
+	/*public int getFormCount() {
 		return mapPOS.keySet().size();
-	}
+	}*/
 	
 	@Override
 	public int compareTo(Object o) {
@@ -196,7 +194,9 @@ public class Vocabula implements Serializable, Comparable {
 		StringBuilder res = new StringBuilder();
 		res.append(String.format("%s [%s]%n", headWord, getTranscription()));
 		mapPOS.keySet().forEach(partOfSpeech -> {
-			res.append(String.format("  : %s%n", partOfSpeech));
+			String partOfSpeechName = partOfSpeech.partName;
+			if (partOfSpeechName.equals(PartOfSpeech.UNDEFINED)) partOfSpeechName = "";
+			res.append(String.format("  : %s%n", partOfSpeechName));
 			Set<String> forms = getKnownForms(partOfSpeech);
 			if (!forms.isEmpty())
 				res.append(String.format("   form%s: ", forms.size() > 1 ? "s" : ""))
@@ -211,7 +211,9 @@ public class Vocabula implements Serializable, Comparable {
 		String headWordFmt = "<table><tr><td class=\"headword\">%s</td><td class=\"transcription\">[%s]</td></tr></table>";
 		res.append(String.format(headWordFmt, headWord, getTranscription()));
 		mapPOS.keySet().forEach(partOfSpeech -> {
-			res.append(String.format("<div class=\"partofspeech\"><span style=\"none\">:</span> %s", partOfSpeech));
+			String partOfSpeechName = partOfSpeech.partName;
+			if (partOfSpeechName.equals(PartOfSpeech.UNDEFINED)) partOfSpeechName = "";
+			res.append(String.format("<div class=\"partofspeech\"><span style=\"none\">:</span> %s", partOfSpeechName));
 			Set<String> forms = getKnownForms(partOfSpeech);
 			if (!forms.isEmpty())
 				res.append(String.format("<div>form%s: ", forms.size() > 1 ? "s" : ""))
@@ -250,46 +252,68 @@ public class Vocabula implements Serializable, Comparable {
 				       : knownForms.getOrDefault(partOfSpeech, Collections.emptySet());
 	}
 	
-	public Set<String> getKnownForms(String partOfSpeechName) {
+	/*public Set<String> getKnownForms(String partOfSpeechName) {
 		return getKnownForms(new PartOfSpeech(language, partOfSpeechName));
-	}
+	}*/
 	
 	public Set<String> getKnownForms() {
 		return getKnownForms(new PartOfSpeech(language, PartOfSpeech.ANY));
 	}
 	
-	public void addSynonym(String definition, String synonym) {
+	/*public void addSynonym(String definition, String synonym) {
 	
-	}
+	}*/
 	
-	public void addSynonyms(String definition, Collection<String> synonyms) {
+	/*public void addSynonyms(String definition, Collection<String> synonyms) {
 	
-	}
+	}*/
 	
-	public void addKnownForms(String partOfSpeechName, Collection<String> newForms) {
+	/*public void addKnownForms(String partOfSpeechName, Collection<String> newForms) {
 		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partOfSpeechName);
 		addKnownForms(partOfSpeech, newForms);
-	}
+	}*/
 	
 	public void addKnownForms(PartOfSpeech partOfSpeech, Collection<String> newForms) {
-		Set<String> forms = knownForms.getOrDefault(partOfSpeech, new LinkedHashSet<>());
+		Set<String> forms = knownForms.computeIfAbsent(partOfSpeech, PoS -> new LinkedHashSet<>());
 		forms.addAll(newForms);
-		knownForms.putIfAbsent(partOfSpeech, forms);
 	}
 	
 	public Collection<String> getPronunciationSources() {
 		return pronunciations != null ? Collections.unmodifiableCollection(pronunciations) : Collections.emptyList();
 	}
 	
-	public boolean hasDecentDefinition(PartOfSpeech partOfSpeech) {
+	/*public boolean hasDecentDefinition(PartOfSpeech partOfSpeech) {
 		return Optional.ofNullable(mapPOS.get(partOfSpeech))
 				       .filter(defs -> defs.size() == 1)
-				       .map(defs -> defs.stream().noneMatch(def -> def.explanation.startsWith("see ")))
+				       .map(defs -> defs.stream().noneMatch(def -> def.explanation.startsWith(Definition.EXPLANATION_PREFIX_REFERENCE)))
 				       .orElse(true);
-	}
+	}*/
 	
 	public Set<PartOfSpeech> getPartsOfSpeech() {
 		return Collections.unmodifiableSet(mapPOS.keySet());
+	}
+	
+	public Vocabula merge(Vocabula other) {
+		other.getPartsOfSpeech().stream()
+				.filter(PoS -> !getPartsOfSpeech().contains(PoS))
+				.forEach(PoS -> {
+					addKnownForms(PoS, other.getKnownForms(PoS));
+					addDefinitions(PoS, other.getDefinitions(PoS));
+				});
+		removeInessentialDefinitions();
+		if (getTranscription().isEmpty()) setTranscription(other.getTranscription());
+		return this;
+	}
+	
+	public void removeInessentialDefinitions() {
+		Map<PartOfSpeech, Set<String>> inessentialDefinitions = getDefinitions().stream()
+				                                                         .filter(Definition::isInessential)
+				                                                         .collect(groupingBy(Definition::getDefinedPartOfSpeech,
+						                                                         mapping(d -> d.explanation, toSet())));
+		inessentialDefinitions.keySet().stream()
+				.filter(pos -> getDefinitions(pos).size() > inessentialDefinitions.get(pos).size())
+				.forEach(pos -> removeDefinitions(pos.partName, inessentialDefinitions.get(pos)));
+		mapPOS.keySet().removeIf(partOfSpeech -> getDefinitions(partOfSpeech).isEmpty());
 	}
 	
 }
