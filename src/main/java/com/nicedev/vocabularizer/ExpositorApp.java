@@ -43,7 +43,7 @@ public class ExpositorApp {
 		try {
 			while (input.hasNextLine()) {
 				query = input.nextLine().trim();
-				int defCount = dictionary.getDefinitionCount();
+				int defCount = dictionary.getDefinitionsCount();
 				if (query.trim().isEmpty())
 					continue;
 				if (query.equals("<"))
@@ -58,7 +58,7 @@ public class ExpositorApp {
 						dictionary.removeVocabula(tokens[0].replace("\"", "").trim(), tokens[1]);
 					else
 						dictionary.removeVocabula(tokens[0].replace("\"", "").trim());
-					if (defCount != dictionary.getDefinitionCount())
+					if (defCount != dictionary.getDefinitionsCount())
 						updateCount++;
 					System.out.println(dictionary);
 					continue;
@@ -96,7 +96,7 @@ public class ExpositorApp {
 					pronounce(vocabula.get());
 				}
 
-				if (defCount != dictionary.getDefinitionCount())
+				if (defCount != dictionary.getDefinitionsCount())
 					System.out.println(dictionary);
 				if (updateCount % 50 == 0)
 					Dictionary.save(dictionary, storageEn);
@@ -146,7 +146,8 @@ public class ExpositorApp {
 	}
 
 	private static Collection<String> getSuggestions() {
-		return Stream.of(expositors).parallel()
+		return Stream.of(expositors)
+					   .parallel()
 				       .sorted(Comparator.comparingInt(expositor -> expositor.priority))
 				       .flatMap(expositor -> expositor.getRecentSuggestions().stream())
 				       .collect(toSet());
@@ -163,6 +164,7 @@ public class ExpositorApp {
 	}
 
 	private static void pronounce(Vocabula vocabula) {
+		pronouncingService.clear();
 		Iterator<String> sIt = vocabula.getPronunciationSources().iterator();
 		if (sIt.hasNext()) pronouncingService.pronounce(sIt.next(), 500);
 		else pronouncingService.pronounce(vocabula.headWord, 500);

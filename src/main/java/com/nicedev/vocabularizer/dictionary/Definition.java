@@ -119,7 +119,7 @@ public class Definition implements Serializable, Comparable{
 					.append(synonyms.stream()
 							        .map(this::emphasizeSynonym)
 							        .collect(joining(", "))
-							        .replaceAll("<b>", "<").replaceAll("</b>",">"))
+							        .replaceAll("<b>", "<").replaceAll("</b>", ">"))
 					.append("\n");
 		if (!useCases.isEmpty()){
 			res.append("\n      : ");

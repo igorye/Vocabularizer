@@ -45,10 +45,10 @@ public class Expositor {
 	private final Language language;
 	public final int priority;
 	private static int instantiated = 0;
-	final private String COLLEGIATE_REQUEST_FMT = "http://www.dictionaryapi.com/api/v1/references/collegiate/xml/%s?key=%s";
-	final private String LEARNERS_REQUEST_FMT = "http://www.dictionaryapi.com/api/v1/references/learners/xml/%s?key=%s";
-	final private String COLLEGIATE_KEY = "f0a68804-fd23-4eca-ba8b-037f5d156a1f";
-	final private String LEARNERS_KEY = "fe9645ff-73f8-4b3f-b09c-dc96b12f767f";
+	final private static String COLLEGIATE_REQUEST_FMT = "http://www.dictionaryapi.com/api/v1/references/collegiate/xml/%s?key=%s";
+	final private static String LEARNERS_REQUEST_FMT = "http://www.dictionaryapi.com/api/v1/references/learners/xml/%s?key=%s";
+	final private static String COLLEGIATE_KEY = "f0a68804-fd23-4eca-ba8b-037f5d156a1f";
+	final private static String LEARNERS_KEY = "fe9645ff-73f8-4b3f-b09c-dc96b12f767f";
 	private String expositorRequestFmt;
 	private String key;
 	private Set<String> recentQuerySuggestions = new LinkedHashSet<>();
@@ -109,11 +109,11 @@ public class Expositor {
 		final Node foundAt;
 		final boolean perfectMatch;
 
-		public SearchResult(String entry, Node foundAt) {
+		SearchResult(String entry, Node foundAt) {
 			this(entry, foundAt, true);
 		}
 
-		public SearchResult(String entry, Node foundAt, boolean perfectMatch) {
+		SearchResult(String entry, Node foundAt, boolean perfectMatch) {
 			this.entry = entry;
 			this.foundAt = foundAt;
 			this.perfectMatch = perfectMatch;
@@ -165,6 +165,7 @@ public class Expositor {
 				List<String> pronunciationURLs = findPronunciation(headWordSR);
 				SearchResult transcription = findTranscriptionSR(headWordSR.foundAt);
 				if (isNewVocabulaProceeding(optNewVocabula, headWordSR)) {
+					//optNewVocabula.ifPresent(vocabula -> { if (!vocabula.getDefinitions().isEmpty()) extracted.add(vocabula); });
 					optNewVocabula.ifPresent(extracted::add);
 					optNewVocabula = Optional.of(new Vocabula(headWordSR.entry, language, transcription.entry));
 				}
@@ -194,7 +195,7 @@ public class Expositor {
 							optNewVocabula.ifPresent(vocabula -> vocabula.addKnownForms(partOfSpeech, forms));
 					}
 					//process definitions
-					if (!definitions.isEmpty()) {
+					if (!definitions.isEmpty() && optNewVocabula.isPresent()) {
 						Vocabula vocabula = optNewVocabula.get();
 						definitions.stream()
 								.map(defSR -> new Object[]{defSR.foundAt,	new Definition(language, vocabula, partOfSpeech, defSR.entry)})
@@ -212,16 +213,15 @@ public class Expositor {
 				}
 			}
 			optNewVocabula.ifPresent(extracted::add);
-			return extracted;
-		} else {
-			collectSuggestions(rootNode);
-			if (acceptSimilar) {
-				for (String suggestion : recentQuerySuggestions)
-					if (equalIgnoreCaseAndPunct(query, suggestion))
-						return extractVocabula(suggestion, xmlDoc, false);
-			}
-			return Collections.emptySet();
+			if (!extracted.isEmpty()) return extracted;
 		}
+		collectSuggestions(rootNode);
+		if (acceptSimilar) {
+			for (String suggestion : recentQuerySuggestions)
+				if (Strings.equalIgnoreCaseAndPunct(query, suggestion))
+					return extractVocabula(suggestion, xmlDoc, false);
+		}
+		return Collections.emptySet();
 	}
 	
 	private boolean isContraction(SearchResult partOfSpeechSR, Collection<SearchResult> definitions) {
@@ -255,12 +255,10 @@ public class Expositor {
 				boolean entryAccepted = false;
 				String currEntry = extractNodeContents(nodes.item(i));
 				Node sourceNode = getSourceNode(nodes.item(i), entryNodeTag);
-				if (currEntry.equals(query)
-						    || (acceptSimilar && (equalIgnoreCaseAndPunct(currEntry, query) || partEquals(currEntry, query))
-								       && hasDefinition(sourceNode))) {
+				if (currEntry.equals(query) || isEntryAcceptable(acceptSimilar, query, currEntry, sourceNode)) {
 					entriesSR.add(new SearchResult(currEntry, sourceNode));
 					entryAccepted = true;
-				} else if (isSimilar(currEntry, query)) {
+				} else if (Strings.isSimilar(currEntry, query)) {
 					similarsSR.add(new SearchResult(currEntry, sourceNode));
 				}
 				if (!entryAccepted && findForms(nodes.item(i).getParentNode()).contains(query))
@@ -284,7 +282,14 @@ public class Expositor {
 		}
 		return entriesSR;
 	}
-
+	
+	private boolean isEntryAcceptable(boolean acceptSimilar, String query, String currEntry, Node sourceNode) {
+		return acceptSimilar
+				       && (Strings.equalIgnoreCaseAndPunct(currEntry, query)
+						           || Strings.partEquals(currEntry, query))
+				       && hasDefinition(sourceNode);
+	}
+	
 	private Node getSourceNode(Node parentNode, String entryNodeTag) {
 		Node node = parentNode;
 		int limit = entryNodeTag.endsWith("/va") ? 2 : 1;
@@ -606,7 +611,8 @@ public class Expositor {
 		try {
 			for (String nodeTag : nodeTags) {
 				int nDefinitions = ((Number) xPath.evaluate(String.format("count(%s)", nodeTag), rootNode, NUMBER)).intValue();
-				if (nDefinitions > 0) return true;
+				if (nDefinitions > 0)
+					return true;
 			}
 		} catch (XPathExpressionException e) {
 			log("Failed to find definitions %s%n", Exceptions.getPackageStackTrace(e, "com.nicedev"));
@@ -627,32 +633,6 @@ public class Expositor {
 		recentQuerySuggestions = strSuggestions;
 	}
 
-	// check for partial equivalence in collocations
-	private boolean partEquals(String currEntry, String query) {
-		String pattern = query.contains(" ")
-				                 ? String.format("(?i)[\\w\\s()/]*(?<![()])%s(?![()])[\\w\\s()/]*", query)
-				                 : String.format("(?i)(\\w+[-])*(?<![()])%s(?![()])([/-]\\w+)*", query);
-		return currEntry.matches(pattern);
-	}
-
-	// check for equality ignoring case allowing mismatch at punctuation chars
-	private boolean equalIgnoreCaseAndPunct(String compared, String match) {
-		if (compared.isEmpty() || match.isEmpty()) return false;
-		if (compared.length() == 1) return compared.equalsIgnoreCase(match);
-		compared = compared.replaceAll("[^\\p{L}]", "").toLowerCase().replace(" ", "");
-		match = match.replaceAll("[^\\p{L}]", "").toLowerCase().replace(" ", "");
-		return compared.equals(match);
-	}
-
-	// checks for equality ignoring case allowing mismatch at punctuation chars and partial equivalence
-	private boolean isSimilar(String compared, String match) {
-		if (compared.isEmpty() || match.isEmpty()) return false;
-		if (compared.length() == 1) return compared.equalsIgnoreCase(match);
-		String comparedLC = compared.toLowerCase().replaceFirst("[^\\p{L}]", "").replace(" ", "");
-		String matchLC = match.toLowerCase().replaceFirst("[^\\p{L}]", "").replace(" ", "");
-		return comparedLC.contains(matchLC);
-	}
-	
 	@SuppressWarnings("unused")
 	private boolean appropriatePartOfSpeech(String partOfSpeechName, String exactPartOfSpeechName) {
 		return !language.getPartOfSpeech(partOfSpeechName).partName.equals(PartOfSpeech.UNDEFINED)
@@ -678,7 +658,7 @@ public class Expositor {
 			return res.toString();
 		} catch (IOException e) {
 			log("Error has occurred while retrieving contents at %s. %s%n",
-					uRequest, Exceptions.getPackageStackTrace(e, "com.nicedev"));;
+					uRequest, Exceptions.getPackageStackTrace(e, "com.nicedev"));
 		}
 		return null;
 	}

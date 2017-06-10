@@ -75,4 +75,30 @@ public class Strings {
 		return "";
 	}
 	
+	// check for partial equivalence in collocations
+	public static boolean partEquals(String compared, String match) {
+		String pattern = compared.contains(" ")
+				                 ? String.format("(?i)[\\w\\s()/]*(?<![()])%s(?![()])[\\w\\s()/]*", match)
+				                 : String.format("(?i)(\\w+[-])*(?<![()])%s(?![()])([/-]\\w+)*", match);
+		return compared.matches(pattern);
+	}
+	
+	// check for equality ignoring case allowing mismatch at punctuation chars
+	public static boolean equalIgnoreCaseAndPunct(String compared, String match) {
+		if (compared.isEmpty() || match.isEmpty()) return false;
+		if (compared.length() == 1) return compared.equalsIgnoreCase(match);
+		compared = compared.replaceAll("[^\\p{L}]", "").toLowerCase().replace(" ", "");
+		match = match.replaceAll("[^\\p{L}]", "").toLowerCase().replace(" ", "");
+		return compared.equals(match);
+	}
+	
+	// checks for equality ignoring case allowing mismatch at punctuation chars and partial equivalence
+	public static boolean isSimilar(String compared, String match) {
+		if (compared.isEmpty() || match.isEmpty()) return false;
+		if (compared.length() == 1) return compared.equalsIgnoreCase(match);
+		String comparedLC = compared.toLowerCase().replaceFirst("[^\\p{L}]", "").replace(" ", "");
+		String matchLC = match.toLowerCase().replaceFirst("[^\\p{L}]", "").replace(" ", "");
+		return comparedLC.contains(matchLC);
+	}
+	
 }

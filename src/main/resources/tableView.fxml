@@ -59,7 +59,7 @@
                 </Tooltip>
             </tooltip>
         </ToggleButton>
-        <ToggleButton fx:id="toggleSimilar" layoutX="82.0" layoutY="474.0" focusTraversable="false" mnemonicParsing="false" prefHeight="25.0" prefWidth="27.0" text="~" textAlignment="CENTER" textOverrun="CLIP" onAction="#toggleAcceptSimilar" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="82.0" selected="true">
+        <ToggleButton fx:id="toggleSimilar" layoutX="82.0" layoutY="474.0" focusTraversable="false" mnemonicParsing="false" prefHeight="25.0" prefWidth="27.0" text="~" textAlignment="CENTER" textOverrun="CLIP" onAction="#toggleAcceptSimilar" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="82.0" selected="false">
             <font>
                 <Font size="10.0" />
             </font>

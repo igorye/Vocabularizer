@@ -66,13 +66,13 @@ abstract public class GoogleRequestProxy {
 		} catch (InterruptedException eTake) {
 			eTake.printStackTrace();
 		}
-		if (relevantSuffixes.size() <= 3)
+		if (relevantSuffixes.size() <= 10)
 			enumHosts();
 		log("[%d] | %s%n", relevantSuffixes.size(), e.getCause().getMessage());
 	}
 	
 	String nextHost() {
-		while (relevantSuffixes.isEmpty()) Thread.yield();
+		//while (relevantSuffixes.isEmpty()) Thread.yield();
 		String suffix = "com";
 		try {
 			suffix = relevantSuffixes.take();

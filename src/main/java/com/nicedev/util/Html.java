@@ -53,7 +53,7 @@ public class Html {
 			String sourceTag = matcher.group("tagToSplit");
 			String sourceTagDefinition = matcher.group("tagDefinition");
 			String splitDelimiter = matcher.group("delimiter");
-			String taggedDelimiter = String.format("</%s>%s <%s>", tagName, splitDelimiter, sourceTagDefinition);
+			String taggedDelimiter = String.format("</%s>%s<%s>", tagName, splitDelimiter, sourceTagDefinition);
 			result = result.replace(sourceTag, sourceTag.replaceAll(splitDelimiter, taggedDelimiter));
 		}
 		return result;

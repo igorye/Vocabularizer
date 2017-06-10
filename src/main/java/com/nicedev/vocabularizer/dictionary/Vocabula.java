@@ -176,7 +176,7 @@ public class Vocabula implements Serializable, Comparable {
 			identicalTo = vocabula;
 	}
 	
-	public int getMeaningCount() {
+	public int getDefinitionsCount() {
 		return mapPOS.values().stream().mapToInt(Set::size).sum();
 	}
 	

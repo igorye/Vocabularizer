@@ -23,8 +23,8 @@ public class Dictionary implements Serializable{
 	final public Language language;
 	final private Map<String, Vocabula> articles;
 	final private Map<Integer, Vocabula> index;
-	private int definitionCount;
-	private int vocabulaCount;
+	private int definitionsCount;
+	private int vocabulasCount;
 	transient private String cachedRequest;
 	transient private Vocabula cachedResponse;
 //  private Locale locale;
@@ -132,9 +132,11 @@ public class Dictionary implements Serializable{
 	}
 	
 	public int addVocabulas(Collection<Vocabula> newVocabulas) {
-		int before = getVocabulaCount();
+		int before = getVocabulasCount();
 		newVocabulas.forEach(this::addVocabula);
-		return getVocabulaCount() - before;
+		// remove any vocabula that after possible merge left with no definitions
+		newVocabulas.forEach(v -> { if (v.getDefinitionsCount() == 0) removeVocabula(v.headWord); });
+		return getVocabulasCount() - before;
 	}
 	
 	public boolean removeVocabula(String charSeq) {
@@ -162,7 +164,7 @@ public class Dictionary implements Serializable{
 	
 	public String explainVocabula(String filter) {
 		StringBuilder res = new StringBuilder();
-		if (getVocabulaCount() != 0) {
+		if (getVocabulasCount() != 0) {
 			filter = isAValidPattern(filter)  ? filter.toLowerCase()
 					                              : String.join("", "\\", filter.toLowerCase());
 			articles.values().stream()
@@ -178,7 +180,7 @@ public class Dictionary implements Serializable{
 	
 	public Collection<Vocabula> getVocabulas(String filter) {
 		if (filter.isEmpty()) return Collections.unmodifiableCollection(articles.values());
-		if (getVocabulaCount() != 0) {
+		if (getVocabulasCount() != 0) {
 			String fFilter = isAValidPattern(filter) ? filter.toLowerCase() : String.join("", "\\", filter.toLowerCase());
 			return articles.values().stream()
 					       .filter(vocabula -> vocabula.headWord.toLowerCase().matches(fFilter))
@@ -189,7 +191,7 @@ public class Dictionary implements Serializable{
 
 	public Set<Vocabula> getVocabulas(Collection<String> headwords) {
 		if (headwords.isEmpty()) return Collections.emptySet();
-		if (getVocabulaCount() != 0) {
+		if (getVocabulasCount() != 0) {
 			return headwords.stream()
 					       .filter(articles::containsKey)
 					       .map(articles::get)
@@ -199,7 +201,7 @@ public class Dictionary implements Serializable{
 	}
 	
 	public List<Vocabula> filterVocabulas(String filter) {
-		if (getVocabulaCount() != 0) {
+		if (getVocabulasCount() != 0) {
 			String fFilter = isAValidPattern(filter) ? filter.toLowerCase() : String.join("", "\\", filter.toLowerCase());
 			return articles.keySet().stream()
 					       .filter(k -> k.toLowerCase().contains(fFilter) || k.toLowerCase().matches(fFilter))
@@ -211,7 +213,7 @@ public class Dictionary implements Serializable{
 	
 	public Set<String> filterHeadwords(String filter, String... matchFlags) {
 		if (filter.isEmpty()) return Collections.unmodifiableSet(articles.keySet());
-		if (getVocabulaCount() != 0) {
+		if (getVocabulasCount() != 0) {
 			String fFilter = getValidPatternOrFailAnyMatch(filter, matchFlags);
 			String filterLC = filter.toLowerCase();
 			return articles.keySet().stream()
@@ -222,7 +224,7 @@ public class Dictionary implements Serializable{
 	}
 	
 	public String toString() {
-		return String.format("Vocabulas: %d | Definitions: %d", getVocabulaCount(), getDefinitionCount());
+		return String.format("Vocabulas: %d | Definitions: %d", getVocabulasCount(), getDefinitionsCount());
 	}
 	
 	/*public int lookupDefinitionEntry(String entry, String partOfSpeechName, String explanation) {
@@ -265,17 +267,17 @@ public class Dictionary implements Serializable{
 				       .orElse(Collections.emptySet());
 	}
 	
-	public int getVocabulaCount() {
-		return vocabulaCount;
+	public int getVocabulasCount() {
+		return vocabulasCount;
 	}
 	
 	private void updateStatistics() {
-		vocabulaCount = articles.keySet().size();
-		definitionCount = articles.values().stream().mapToInt(Vocabula::getMeaningCount).sum();
+		vocabulasCount = articles.keySet().size();
+		definitionsCount = articles.values().stream().mapToInt(Vocabula::getDefinitionsCount).sum();
 	}
 	
-	public int getDefinitionCount() {
-		return definitionCount;
+	public int getDefinitionsCount() {
+		return definitionsCount;
 	}
 	
 	public Set<Definition> getDefinitions(String entry, String partOfSpeechName) {

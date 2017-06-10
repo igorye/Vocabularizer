@@ -1,7 +1,6 @@
 package com.nicedev.vocabularizer.gui;
 
 import javafx.application.Platform;
-import javafx.scene.Node;
 import javafx.scene.control.SingleSelectionModel;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
@@ -36,11 +35,11 @@ public class WebTabPane extends TabPane {
 	}
 	
 	public int getSelectedTabIndex() {
-		Node focusOwner = getScene().getFocusOwner();
-		//should have focus to get actual selected tab index
-		requestFocus();
+//		Node focusOwner = getScene().getFocusOwner();
+		//should?? have focus to get actual selected tab index
+//		requestFocus();
 		int selectedIndex = tabSingleSelectionModel.getSelectedIndex();
-		focusOwner.requestFocus();
+//		focusOwner.requestFocus();
 		return selectedIndex;
 	}
 	
