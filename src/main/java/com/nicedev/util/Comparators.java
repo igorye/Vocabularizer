@@ -29,5 +29,11 @@ public class Comparators {
 			return index >= 0 ? index : Integer.MAX_VALUE;
 		});
 	}
+	
+	public static Comparator<String> partialMatchComparator(String pattern, boolean ignoreCase){
+		return startsWithCmpr(pattern, ignoreCase)
+				       .thenComparing(indexOfCmpr(pattern))
+				       .thenComparing(Comparator.naturalOrder());
+	}
 }
 

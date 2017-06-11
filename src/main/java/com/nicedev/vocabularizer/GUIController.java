@@ -1,6 +1,7 @@
 package com.nicedev.vocabularizer;
 
 import com.nicedev.util.*;
+import com.nicedev.util.Comparators;
 import com.nicedev.vocabularizer.dictionary.Dictionary;
 import com.nicedev.vocabularizer.dictionary.IndexingService;
 import com.nicedev.vocabularizer.dictionary.Vocabula;
@@ -49,13 +50,15 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.*;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static com.nicedev.util.Comparators.indexOfCmpr;
-import static com.nicedev.util.Comparators.startsWithCmpr;
+import static com.nicedev.util.Comparators.*;
 import static com.nicedev.util.Html.wrapInTag;
 import static com.nicedev.util.SimpleLog.log;
 import static com.nicedev.util.Streams.getStream;
@@ -100,7 +103,7 @@ public class GUIController implements Initializable {
 	private final Label NO_MATCH = new Label("No matches");
 	private final Label SEARCHING = new Label("Searching...");
 	
-	private final String BASE_PACKAGE = "com.nicedev";
+	public static final String BASE_PACKAGE = "com.nicedev";
 	private final String PROJECT_NAME = "Vocabularizer";
 	private final String USER_HOME = System.getProperties().getProperty("user.home");
 	private final String PROJECT_HOME = System.getProperty(PROJECT_NAME + ".home", String.format("%s\\%s", USER_HOME, PROJECT_NAME));
@@ -154,21 +157,12 @@ public class GUIController implements Initializable {
 		cssHref = res != null ? res : "";
 		res = getClass().getProtectionDomain().getClassLoader().getResource("view.js").toExternalForm();
 		jsHref = res != null ? res : "";
-		
-		Function<String, Task<Collection<String>>> queryFilterTaskProvider = pattern -> new Task<Collection<String>>() {
-			@Override
-			protected Collection<String> call() throws Exception {
-				return isCancelled() ? Collections.emptyList() : findReferences(pattern, toggleRE.isSelected());
-			}
-		};
-		queryBoxFiltering = new DelayedTaskService<>(queryFilterTaskProvider, INPUT_FILTERING_DELAY);
-		queryBoxFiltering.setOnSucceeded(event -> {
-			if (tabPane.getSelectedTabIndex() == 0) {
-				hwData.setAll((Collection<String>) event.getSource().getValue());
-				event.getSource().cancel();
-			}
-		});
-		
+		tableItemFiltering = getTableFilteringTask();
+		queryBoxFiltering = getQueryFiltering();
+		executor = Executors.newCachedThreadPool();
+	}
+	
+	private DelayedTaskService<String> getTableFilteringTask() {
 		Function<String, Task<String>> tableFilterTaskProvider = pattern -> new Task<String>() {
 			@Override
 			protected String call() throws Exception {
@@ -177,20 +171,36 @@ public class GUIController implements Initializable {
 				return isCancelled() ? queryBoxValue.get() : selectedItem;
 			}
 		};
-		tableItemFiltering = new DelayedTaskService<>(tableFilterTaskProvider, FILTER_DELAY);
-		tableItemFiltering.setOnSucceeded(event -> {
+		DelayedTaskService<String> task = new DelayedTaskService<>(tableFilterTaskProvider, FILTER_DELAY);
+		task.setOnSucceeded(event -> {
 			String selectedItem = (String) event.getSource().getValue();
 			updateQueryField(selectedItem, false);
 			Map<String, Collection<String>> index = indexer.getIndex();
-			Supplier<List<String>> entireList = () -> index.keySet().stream()
-					                                          .sorted(startsWithCmpr(selectedItem, true)
-							                                                  .thenComparing(indexOfCmpr(selectedItem))
-							                                                  .thenComparing(Comparator.naturalOrder()))
+			Collection<String> referencesAtSelected = index.getOrDefault(selectedItem, findReferences(ALL_MATCH)).stream()
+					                                          .sorted(partialMatchComparator(selectedItem, true))
 					                                          .collect(toList());
-			hwData.setAll(index.getOrDefault(selectedItem, entireList.get()));
+			hwData.setAll(referencesAtSelected);
 			event.getSource().cancel();
 		});
-		executor = Executors.newCachedThreadPool();
+		return task;
+	}
+	
+	@SuppressWarnings("unchecked")
+	private DelayedTaskService<Collection<String>> getQueryFiltering() {
+		Function<String, Task<Collection<String>>> queryFilterTaskProvider = pattern -> new Task<Collection<String>>() {
+			@Override
+			protected Collection<String> call() throws Exception {
+				return isCancelled() ? Collections.emptyList() : findReferences(pattern, toggleRE.isSelected());
+			}
+		};
+		DelayedTaskService<Collection<String>> task = new DelayedTaskService<>(queryFilterTaskProvider, INPUT_FILTERING_DELAY);
+		task.setOnSucceeded(event -> {
+			if (tabPane.getSelectedTabIndex() == 0) {
+				hwData.setAll((Collection<String>) event.getSource().getValue());
+				event.getSource().cancel();
+			}
+		});
+		return task;
 	}
 	
 	@Override
@@ -731,7 +741,7 @@ public class GUIController implements Initializable {
 						handleQuery(headWord);
 						updateQueryField(headWord, false);
 					} else {
-						render(optVocabula.get().toHTML(), highlights);
+						render(Collections.singletonList(optVocabula.get()), highlights);
 						pronounce(optVocabula.get());
 					}
 					newTab.setUserData(Boolean.FALSE);
@@ -749,9 +759,7 @@ public class GUIController implements Initializable {
 							                                .filter(Optional::isPresent)
 							                                .map(Optional::get)
 							                                .collect(toList());
-					String comparing = compared.stream().map(Vocabula::toHTML).collect(joining("</td><td width='50%'>"));
-					String content = String.format("<table><tr><td width='50%%'>%s</td></tr></table>", comparing);
-					render(content);
+					render(compared);
 					newTab.setUserData(Boolean.FALSE);
 				}
 			}/*)*/);
@@ -1038,7 +1046,7 @@ public class GUIController implements Initializable {
 			currentTab.setText(vocabula.headWord);
 			currentTab.getContent().setUserData(Optional.of(vocabula));
 			log("showQueryResultImpl: render for\"%s\"", vocabula.headWord);
-			render(vocabula.toHTML(), textsToHighlight);
+			render(Collections.singletonList(vocabula), textsToHighlight);
 			pronounce(vocabula);
 			log("SQRI: updateQueryField(%s,%s)", vocabula.headWord, false);
 			updateQueryField(vocabula.headWord, false);
@@ -1141,8 +1149,8 @@ public class GUIController implements Initializable {
 				       .collect(toList());
 	}
 	
-	private void render(String body, String... textsToHighlight) {
-		if (body.isEmpty()) {
+	private void render(Collection<Vocabula> vocabulas, String... textsToHighlight) {
+		if (vocabulas.isEmpty()) {
 			tabPane.getActiveEngine().ifPresent(engine -> engine.loadContent(""));
 			return;
 		}
@@ -1150,21 +1158,30 @@ public class GUIController implements Initializable {
 			setSceneCursor(Cursor.WAIT);
 			String contentFmt = "<html>%n<head>%n<link rel='stylesheet' href='%s'/>%n<script src='%s'></script>%n" +
 					                    "</head>%n<body>%n%s</body>%n</html>";
-			String bodyContent = body;
-			if (textsToHighlight != null && textsToHighlight.length > 0) {
-				String highlighted = regexEscapeSymbols(Arrays.stream(textsToHighlight).collect(joining("|")), "[()]");
-				// match tag's boundary or word's boundary inside tag
-				String highlightedMatch = String.format("(?i)%s(?=</| )|(?<=>| )$1s", highlighted);
-				if (!highlighted.isEmpty()) {
-					bodyContent = wrapInTag(bodyContent, highlightedMatch, "span", CLASS_HIGHLIGHTED);
-				}
+			String bodyContent;
+			if (vocabulas.size() == 1) {
+				bodyContent = vocabulas.iterator().next().toHTML();
+			} else {
+				String comparing = vocabulas.stream().map(Vocabula::toHTML).collect(joining("</td><td width='50%'>"));
+				bodyContent = String.format("<table><tr><td width='50%%'>%s</td></tr></table>", comparing);
 			}
+			bodyContent = highlight(bodyContent, textsToHighlight);
 			bodyContent = injectAnchors(bodyContent);
 			String htmlContent = String.format(contentFmt, cssHref, jsHref, bodyContent);
 			engine.loadContent(htmlContent);
 			tabPane.getActiveTab().getContent().requestFocus();
 		});
 		setSceneCursor(Cursor.DEFAULT);
+	}
+	
+	private String highlight(String bodyContent, String[] textsToHighlight) {
+		if (textsToHighlight == null || textsToHighlight.length == 0) return bodyContent;
+		String highlighted = regexEscapeSymbols(Arrays.stream(textsToHighlight).collect(joining("|")), "[()]");
+		if (highlighted.isEmpty()) return bodyContent;
+		// match tag's boundary or word's boundary inside tag
+		String highlightedMatch = String.format("(?i)%s(?=</| )|(?<=>| )$1s", highlighted);
+		bodyContent = wrapInTag(bodyContent, highlightedMatch, "span", CLASS_HIGHLIGHTED);
+		return bodyContent;
 	}
 	
 	private String injectAnchors(String body) {
@@ -1199,9 +1216,6 @@ public class GUIController implements Initializable {
 	private final Function<String, List<String>> referencesFinder = pattern -> {
 		String patternLC = pattern.toLowerCase();
 		String validPattern = getValidPatternOrFailAnyMatch(composeRE(pattern), "i");
-		Comparator<String> partialMatchComparator = startsWithCmpr(pattern, true)
-				                                            .thenComparing(indexOfCmpr(pattern))
-				                                            .thenComparing(Comparator.naturalOrder());
 		Predicate<String> regExMatchPredicate = s -> !toggleRE.isSelected() || s.matches(validPattern);
 		return pattern.isEmpty()
 				       ? getStream(indexer.getIndex().keySet(), ALLOW_PARALLEL_STREAM)
@@ -1214,7 +1228,7 @@ public class GUIController implements Initializable {
 								                        : Stream.of(hw))
 						         .filter(regExMatchPredicate)
 						         .distinct()
-						         .sorted(partialMatchComparator)
+						         .sorted(partialMatchComparator(pattern, true))
 						         .collect(toList());
 	};
 	

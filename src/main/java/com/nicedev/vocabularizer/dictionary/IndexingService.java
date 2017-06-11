@@ -19,6 +19,7 @@ import java.util.stream.Stream;
 
 import static com.nicedev.util.SimpleLog.log;
 import static com.nicedev.util.Streams.getStream;
+import static com.nicedev.vocabularizer.GUIController.BASE_PACKAGE;
 import static java.lang.Math.max;
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyMap;
@@ -86,15 +87,14 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 	protected void failed() {
 		super.failed();
 		log("Exception has occurred while removing from index: %s",
-				Exceptions.getPackageStackTrace((Exception) getException(), "com.nicedev"));
+				Exceptions.getPackageStackTrace((Exception) getException(), BASE_PACKAGE));
 	}
 	
 	@Override
 	protected void succeeded() {
 		super.succeeded();
 		index = getValue();
-		log("indexingService: succeeded");
-		log("built index in %f (allowParallelStream==%s, indexingAlgorithm==%s",
+		log("indexingService: succeeded%nbuilt index in %f (allowParallelStream==%s, indexingAlgorithm==%s",
 				(System.currentTimeMillis() - start) / 1000f, ALLOW_PARALLEL, INDEXING_ALGORITHM);
 		// should invoke succeedHandler by ourselves to guarantee succeeded() would be executed before user's handler
 		succeededHandler.handle(new WorkerStateEvent(this, WorkerStateEvent.WORKER_STATE_SUCCEEDED));
