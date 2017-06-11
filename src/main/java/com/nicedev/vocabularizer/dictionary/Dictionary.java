@@ -132,6 +132,7 @@ public class Dictionary implements Serializable{
 	}
 	
 	public int addVocabulas(Collection<Vocabula> newVocabulas) {
+		if (newVocabulas.isEmpty()) return 0;
 		int before = getVocabulasCount();
 		newVocabulas.forEach(this::addVocabula);
 		// remove any vocabula that after possible merge left with no definitions
