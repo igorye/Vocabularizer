@@ -36,11 +36,11 @@ public class WebTabPane extends TabPane {
 	
 	public int getSelectedTabIndex() {
 //		Node focusOwner = getScene().getFocusOwner();
-		//should?? have focus to get actual selected tab index
+//		should?? have focus to get actual selected tab index
 //		requestFocus();
-		int selectedIndex = tabSingleSelectionModel.getSelectedIndex();
+//		int selectedIndex = tabSingleSelectionModel.getSelectedIndex();
 //		focusOwner.requestFocus();
-		return selectedIndex;
+		return tabSingleSelectionModel.getSelectedIndex();
 	}
 	
 	public Tab getActiveTab() {
@@ -59,7 +59,7 @@ public class WebTabPane extends TabPane {
 		});
 	}
 	
-	public void addTab(Tab newTab, boolean setActive) {
+	private void addTab(Tab newTab, boolean setActive) {
 		Platform.runLater(() -> {
 			updateTabIndices();
 			getTabs().add(newTab);
@@ -79,7 +79,7 @@ public class WebTabPane extends TabPane {
 		getTabs().removeIf(ExpositorTab.sameTab(title));
 	}
 	
-	public void updateTabIndices() {
+	private void updateTabIndices() {
 		activeTabIndex = getSelectedTabIndex();
 	}
 	
@@ -116,19 +116,19 @@ public class WebTabPane extends TabPane {
 		return false;
 	}
 	
-	public boolean trySelectTab(int startIndex, Predicate<Tab> tabPredicate) {
+	/*public boolean trySelectTab(int startIndex, Predicate<Tab> tabPredicate) {
 		int selected = tryWithTab(startIndex, tabPredicate, this::selectTab, false);
 		return selected == 1;
-	}
+	}*/
 	
 	public boolean trySelectTab(Predicate<Tab> tabPredicate) {
 		int selected = tryWithTab(1, tabPredicate, this::selectTab, false);
 		return selected == 1;
 	}
 	
-	public int tryWithTab(Predicate<Tab> tabPredicate, Consumer<Tab> perform) {
+	/*public int tryWithTab(Predicate<Tab> tabPredicate, Consumer<Tab> perform) {
 		return tryWithTab(0, tabPredicate, perform, true);
-	}
+	}*/
 	
 	private int tryWithTab(int startIndex, Predicate<Tab> tabPredicate, Consumer<Tab> perform, boolean forEach) {
 		Collection<Tab> tabs = getTabs().stream()

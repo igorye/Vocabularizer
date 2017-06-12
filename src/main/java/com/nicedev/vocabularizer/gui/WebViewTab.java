@@ -18,7 +18,7 @@ import static java.util.Arrays.stream;
 import static java.util.stream.Collectors.joining;
 
 public class WebViewTab extends Tab {
-	private static final int DEFAULT_LENGTH = 20;
+	private static final int DEFAULT_LENGTH = 25;
 	private WebEngine webEngine;
 	private Tooltip tooltip;
 	private WebView webView;
@@ -30,6 +30,7 @@ public class WebViewTab extends Tab {
 	
 	public WebViewTab(String text, Object userData) {
 		this(text, new WebView());
+		enableFirstSelectionHandler();
 		getView().setUserData(userData);
 	}
 	
@@ -50,30 +51,29 @@ public class WebViewTab extends Tab {
 		Font font = tooltip.getFont();
 		tooltip.fontProperty().set(new Font(font.getName(), font.getSize() + 1.0));
 		setTooltip(tooltip);
-		textProperty().addListener(onChangeListener());
+		textProperty().addListener(onChangeListener);
 	}
 	
-	static String filter(String text) {
+	private static String filter(String text) {
 		return text.replaceAll(" {2,}|\\t+", " ");
 	}
 	
-	static String ellipsis(String text, int... lengthLimit) {
+	private static String ellipsis(String text, int... lengthLimit) {
 		if (text == null) return text;
 		int textLength = text.length();
 		text = stream(text.split("(?<=[\\r\\n\\f])"))
 				       .filter(Strings::notBlank).map(s -> s.replaceAll("[ ]{2,}|\\t+", " "))
 				       .collect(joining(" "));
 		text = text.split("[\\n\\r\\f]")[0];
-		int limit = lengthLimit.length > 0 ? lengthLimit[0] : Math.min(DEFAULT_LENGTH, text.length());
+		int limit = lengthLimit != null && lengthLimit.length > 0
+				            ? lengthLimit[0] : Math.min(DEFAULT_LENGTH, text.length());
 		return (textLength > limit) ? text.substring(0, limit).concat(" ...") : text;
 	}
 	
-	private ChangeListener<String> onChangeListener() {
-		return (observable, oldValue, newValue) -> {
+	private ChangeListener<String> onChangeListener = (observable, oldValue, newValue) -> {
 			setText(ellipsis(newValue));
 			tooltip.setText(filter(newValue));
 		};
-	}
 	
 	public WebEngine getEngine() {
 		return webEngine;
@@ -91,4 +91,22 @@ public class WebViewTab extends Tab {
 		handlersBulk.accept(this);
 	}
 	
+	private void enableFirstSelectionHandler() {
+		setUserData(Boolean.TRUE);
+	}
+	
+	private void disableFirstSelectionHandler() {
+		setUserData(Boolean.FALSE);
+	}
+	
+	public boolean firstSelection() {
+		return (Boolean) getUserData();
+	}
+	
+	public void setOnSelected(Consumer<WebViewTab> handler) {
+		selectedProperty().addListener((observable, oldValue, newValue) -> {
+			handler.accept(this);
+			disableFirstSelectionHandler();
+		});
+	}
 }
