@@ -7,6 +7,10 @@ import java.util.function.Predicate;
 
 public class ExpositorTab extends WebViewTab {
 	
+	public ExpositorTab(String title) {
+		this(title, "", null);
+	}
+	
 	public ExpositorTab(String title, Object userData) {
 		this(title, "", userData);
 	}

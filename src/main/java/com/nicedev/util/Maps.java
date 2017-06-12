@@ -9,8 +9,6 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import static java.util.Collections.emptyMap;
-
 public class Maps {
 	
 	private static final Collection EMPTY_COLLECTION = new ArrayList<>();
@@ -24,30 +22,34 @@ public class Maps {
 		return HashMap::new;
 	}
 	
-	//apply action on dest with each entry from source; apply mappingFunction if key is missing in dest
+	// apply action on dest with each entry from source
+	// apply mappingFunction if key is missing in dest
 	public static <K, V> void apply(BiConsumer<V, V> action, Map<K, V> dest, Map<K, V> source,
 	                                Function<K, V> mappingFunction) {
 		source.keySet()
 				.forEach(key -> action.accept(dest.computeIfAbsent(key, mappingFunction), source.get(key)));
 	}
 	
-	//merge source into dest; applies mappingFunction if dest key is missing
+	// merge source into dest
+	// applies mappingFunction if dest key is missing
 	@SuppressWarnings("unchecked")
 	public static <K, V extends Collection> void merge(Map<K, V> dest, Map<K, V> source, Function<K, V> mappingFunction) {
 		apply(Collection::addAll, dest, source, mappingFunction);
 	}
 	
-	//returns map that equals dest.merge(source); applies DefaultMappingFunction if dest key is missing
+	// returns map that equals m1.merge(m2)
+	// applies DefaultMappingFunction if dest key is missing
 	public static <K, V extends Collection> Map<K, V> combine(Map<K, V> m1, Map<K, V> m2) {
 		return combine(m1, m2, getDefaultMappingFunction());
 	}
 	
-	//returns map that equals dest.merge(source); applies mappingFunction if dest key is missing
+	// returns map that equals m1.merge(m2)
+	// applies mappingFunction if dest key is missing
 	public static <K, V extends Collection> Map<K, V> combine(Map<K, V> m1, Map<K, V> m2, Function<K, V> mappingFunction) {
 		return combine(getDefaultSupplier(), m1, m2, mappingFunction);
 	}
 	
-	// returns Map that equals dest.merge(source)
+	// returns Map that equals m1.merge(m2)
 	// supplier is a function that creates a new result container
 	// DEFAULT_MAPPING_FUNCTION applied if dest key is missing
 	@SuppressWarnings("unchecked")
@@ -57,6 +59,14 @@ public class Maps {
 		Map<K, V> result = supplier.get();
 		result.putAll(m1);
 		apply(Collection::addAll, result, m2, mappingFunction);
+		return result;
+	}
+	
+	// returns Map that equals m1.merge(m2)
+	// supplier is a function that creates a new result container
+	public static <K, T> Map<K, Collection<T>> combine(Map<K, Collection<T>> m1, Map<K, Collection<T>> m2, boolean parallelizable) {
+		Map<K, Collection<T>> result = Maps.clone(m1, parallelizable);
+		Maps.mergeLeft(result, m2, parallelizable);
 		return result;
 	}
 	
@@ -76,7 +86,7 @@ public class Maps {
 	@SuppressWarnings("unchecked")
 	public static <K, V extends Collection> Map<K, V> clone(Map<K, V> map) {
 		Class clazz = map.getClass();
-		Object result = emptyMap();
+		Object result = Collections.emptyMap();
 		try {
 			Constructor ctor = clazz.getConstructor(Map.class);
 			result = ctor.newInstance(map);

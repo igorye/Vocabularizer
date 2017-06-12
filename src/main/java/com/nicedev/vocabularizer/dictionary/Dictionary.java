@@ -287,25 +287,25 @@ public class Dictionary implements Serializable{
 				       .orElse(Collections.emptySet());
 	}
 	
-	/*public boolean containsVocabula(String entry) {
-		return ofNullable(articles.get(entry)).isPresent();
-	}*/
+	public boolean containsVocabula(String headword) {
+		return getVocabula(headword).isPresent();
+	}
 	
-	public Optional<Vocabula> getVocabula(String headWord) {
-		if (headWord.isEmpty()) return Optional.empty();
-		if (isCached(headWord)) return Optional.ofNullable(cachedResponse);
+	public Optional<Vocabula> getVocabula(String headword) {
+		if (headword.isEmpty()) return Optional.empty();
+		if (isCached(headword)) return Optional.ofNullable(cachedResponse);
 		List<String> candidates = articles.keySet().stream()
-				                          .filter(s -> s.matches("(?i)" + Strings.regexEscapeSymbols(headWord, "[()]")))
-				                          .filter(s -> headWord.substring(1, headWord.length()).equals(s.substring(1, s.length())))
+				                          .filter(s -> s.matches("(?i)" + Strings.escapeSymbols(headword, "[()]")))
+				                          .filter(s -> headword.substring(1, headword.length()).equals(s.substring(1, s.length())))
 										  .sorted()
 				                          .collect(toList());
 		//if (!candidates.isEmpty()) 
 		//	SimpleLog.log("looking for %s. available %s", headword, candidates);
-		cachedResponse = (candidates.contains(headWord))
-											? articles.get(headWord)
-											: (Character.isUpperCase(headWord.charAt(0)) && candidates.size() == 1)
+		cachedResponse = (candidates.contains(headword))
+											? articles.get(headword)
+											: (Character.isUpperCase(headword.charAt(0)) && candidates.size() == 1)
 													? articles.get(candidates.get(0)) : null;
-		cachedRequest = headWord;
+		cachedRequest = headword;
 		return ofNullable(cachedResponse);
 	}
 	
