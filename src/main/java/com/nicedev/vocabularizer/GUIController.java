@@ -1177,9 +1177,10 @@ public class GUIController implements Initializable {
 		String highlighted = Stream.of(textsToHighlight)
 				                     .map(s -> String.format("(%s)", Strings.escapeSymbols(s, "[()]")))
 				                     .collect(joining("|"));
+		highlighted = String.format("(%s)", highlighted);
 		if (highlighted.isEmpty()) return bodyContent;
 		// match tag's boundary or word's boundary inside tag
-		String highlightedMatch = String.format("(?i)%s(?=</| )|(?<=>| )$1s", highlighted);
+		String highlightedMatch = String.format("(?i)(%s(?=</| ))|((?<=>| )%1$s)", highlighted);
 		bodyContent = wrapInTag(bodyContent, highlightedMatch, "span", CLASS_HIGHLIGHTED);
 		return bodyContent;
 	}
