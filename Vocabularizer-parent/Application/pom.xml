@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+				 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+				 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	
+	<parent>
+		<groupId>com.nicedev.vocabularizer</groupId>
+		<artifactId>Vocabularizer-parent</artifactId>
+		<version>0.1-dev</version>
+	</parent>
+	
+	<artifactId>Application</artifactId>
+	<version>0.1-dev</version>
+	<packaging>pom</packaging>
+	
+	<modules>
+		<module>ExpositorC</module>
+		<module>ExpositorGUI</module>
+	</modules>
+	
+	<dependencies>
+		
+		<dependency>
+			<groupId>com.nicedev</groupId>
+			<artifactId>util</artifactId>
+			<version>0.1-dev</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>com.nicedev</groupId>
+			<artifactId>gtts</artifactId>
+			<version>0.1-dev</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>com.nicedev.vocabularizer</groupId>
+			<artifactId>expositor</artifactId>
+			<version>0.1-dev</version>
+		</dependency>
+	</dependencies>
+
+</project>
