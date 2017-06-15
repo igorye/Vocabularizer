@@ -1,32 +1,48 @@
 package com.nicedev.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.lang.invoke.MethodHandles;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Html {
 	
+	static Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
+	
+	// wrap sole group match in specified html tag <tag> of class <tag class='className'>
 	public static String wrapInTag(String source, String match, String tag, String className) {
 		Matcher matcher = Pattern.compile(match).matcher(source);
 		StringBuilder sb = new StringBuilder();
 		String wrapFmt = className.isEmpty() ? "<%1$s>%3$s</%1$s>" : "<%1$s class=\"%2$s\">%3$s</%1$s>";
-		int lastEnd = -1;
+		int matchEnd = -1;
+		try {
 		while (matcher.find()) {
 			int targetGroup = matcher.groupCount() > 1 ? 1 : 0;
 			String matched = matcher.group(targetGroup);
+			while (targetGroup < matcher.groupCount() && matched == null)
+				matched = matcher.group(++targetGroup);
 			String wrapped = String.format(wrapFmt, tag, className, matched);
-			if (lastEnd < 0) {
-				sb.append(source, 0, matcher.start(targetGroup) );
+			int matchStart = matcher.start(targetGroup);
+			if (matchStart < 0) matchStart = matcher.start(targetGroup + 1);
+			if (matchEnd < 0) {
+				sb.append(source, 0, matchStart);
 			} else {
-				sb.append(source, lastEnd, matcher.start(targetGroup));
+				sb.append(source, matchEnd, matchStart);
 			}
 			sb.append(wrapped);
-			lastEnd = matcher.end(targetGroup);
+			matchEnd = matcher.end(targetGroup);
 		}
-		if (lastEnd > 0)
-			sb.append(source, lastEnd, source.length());
+		if (matchEnd > 0)
+			sb.append(source, matchEnd, source.length());
 		else
 			sb.append(source);
 		return sb.toString();
+		} catch (Exception e) {
+			LOGGER.error("{}. Unable to wrap {} at {}", e.toString(), match, source);
+		}
+		return source;
 	}
 	
 	// transform tags content into several tags made of source tag's split content

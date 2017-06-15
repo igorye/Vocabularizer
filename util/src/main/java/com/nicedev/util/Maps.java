@@ -86,7 +86,7 @@ public class Maps {
 	@SuppressWarnings("unchecked")
 	public static <K, V extends Collection> Map<K, V> clone(Map<K, V> map) {
 		Class clazz = map.getClass();
-		Object result = Collections.emptyMap();
+		Object result = java.util.Collections.emptyMap();
 		try {
 			Constructor ctor = clazz.getConstructor(Map.class);
 			result = ctor.newInstance(map);
