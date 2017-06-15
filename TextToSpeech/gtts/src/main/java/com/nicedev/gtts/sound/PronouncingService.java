@@ -203,8 +203,6 @@ public class PronouncingService extends Thread {
 	}
 	
 	private boolean hasSomeData() {
-		LOGGER.debug("hasInput = {}, cacheQueue.isEmpty = {}, pronouncingQueue.isEmpty = {}",
-								 hasInput,cacheQueue.isEmpty(), pronouncingQueue.isEmpty());
 		return hasInput || !cacheQueue.isEmpty() || !pronouncingQueue.isEmpty();
 	}
 	

@@ -20,7 +20,7 @@ public class Dictionary implements Serializable{
 	
 	private static final long serialVersionUID = -1507438212189317827L;
 	
-	transient private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
+	static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
 	
 	final public Language language;
 	final private Map<String, Vocabula> articles;
@@ -47,7 +47,7 @@ public class Dictionary implements Serializable{
 				throw new IllegalArgumentException(String.format("Invalid target language: looking %s found %s",
 						langName, dictionary.language.langName));
 		} catch (IOException | ClassNotFoundException | IllegalArgumentException e) {
-			LOGGER.error("Unable to load \"{}\"\n{}%n", path, e.getLocalizedMessage());
+			LOGGER.error("Unable to load \"{}\"\n{}\n", path, e.toString());
 		}
 		if (dictionary != null && !dictionary.articles.isEmpty()) {
 			dictionary.updateStatistics();

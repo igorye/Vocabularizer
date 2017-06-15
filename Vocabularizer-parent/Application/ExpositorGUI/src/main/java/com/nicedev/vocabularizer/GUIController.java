@@ -51,6 +51,7 @@ import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.Collections;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
@@ -75,7 +76,7 @@ import static javafx.scene.input.KeyCode.SPACE;
 
 public class GUIController implements Initializable {
 	
-	private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
+	static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
 	@FXML
 	private ToggleButton toggleSimilar;
 	@FXML
@@ -286,7 +287,7 @@ public class GUIController implements Initializable {
 		indexer.start();
 	}
 	
-	public void stop() {
+	void stop() {
 		LOGGER.info("stop: terminating app");
 		LOGGER.info("stop: saving dict");
 		if (updateCount != 0) saveDictionary();
@@ -458,7 +459,6 @@ public class GUIController implements Initializable {
 				break;
 			case ESCAPE:
 				resetFilter();
-				updateTableState();
 				break;
 			default:
 				if (!event.isControlDown() && event.getText().matches("[\\p{Graph}]")) {
@@ -476,14 +476,14 @@ public class GUIController implements Initializable {
 			updateQueryField(ALL_MATCH);
 			queryBox.getSelectionModel().clearSelection();
 			hwData.setAll(findReferences(ALL_MATCH));
-			updateTableState();
+			updateTableState(false);
 		} catch (Exception e) {
 			LOGGER.error("resetFilter: unexpected exception - {} | {}", e, Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
 		}
 	}
 	
 	@FXML
-	protected void onWebViewKeyReleased(KeyEvent event) {
+	private void onWebViewKeyReleased(KeyEvent event) {
 		if (event.getEventType() != KeyEvent.KEY_RELEASED) return;
 		Node sourceNode = (Node) event.getSource();
 		String query = getSelectedText();
@@ -658,17 +658,18 @@ public class GUIController implements Initializable {
 	}
 	
 	private void updateTableState() {
+		hwData.clear();
 		updateTableState(true);
 	}
 	
 	private void updateTableState(boolean searching) {
-		Platform.runLater(() -> {
+//		Platform.runLater(() -> {
 			String failedSearchMarker = " ";
 			hwTable.setPlaceholder(searching ? SEARCHING
 								                       : queryBoxValue.getValue().endsWith(failedSearchMarker)
 										                         ? NOTHING_FOUND : NO_MATCH);
 			hwTable.refresh();
-		});
+//		});
 	}
 	
 	private void engageTableSelectedItemFiltering() {
@@ -684,10 +685,10 @@ public class GUIController implements Initializable {
 	}
 	
 	private void setSceneCursor(Cursor cursor) {
-//		Platform.runLater(() -> {
+		Platform.runLater(() -> {
 		tabPane.setCursor(cursor);
 		tabPane.getActiveTab().getContent().setCursor(cursor);
-//		});
+		});
 	}
 	
 	
@@ -833,6 +834,8 @@ public class GUIController implements Initializable {
 		return cm;
 	}
 	
+	private final Function<String, String> requestFormatterGT = s -> String.format(GT_REQUEST_URL, foreignLanguage, localLanguage, s);
+	
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 	private void appendContextMenuItems(Object contextMenu, Optional<String> context) {
 		EventHandler<ActionEvent> handleQueryEH = this::onSearch;
@@ -844,10 +847,9 @@ public class GUIController implements Initializable {
 		}
 		// default translation behavior is not available in compare mode
 		if (!context.filter(s -> s.contains("|")).isPresent()) {
-			Function<String, String> requestFormatterGT = s -> String.format(GT_REQUEST_URL, foreignLanguage, localLanguage, s);
 			EventHandler<ActionEvent> showGTTranslationEH = e -> showTranslation(context, requestFormatterGT);
 			
-			Function<String, String> requestFormatterWH = s -> String.format(WH_REQUEST_URL, s);
+			final Function<String, String> requestFormatterWH = s -> String.format(WH_REQUEST_URL, s);
 			EventHandler<ActionEvent> showWHTranslationEH = e -> showTranslation(context, requestFormatterWH);
 			
 			Menu translations = new Menu("Translate");
@@ -938,7 +940,6 @@ public class GUIController implements Initializable {
 			@Override
 			protected Void call() {
 				boolean changeOccurred = false;
-				updateTableState();
 				try {
 					int defCount = dictionary.getDefinitionsCount();
 					boolean acceptSimilar = query.startsWith("~");
@@ -986,8 +987,8 @@ public class GUIController implements Initializable {
 								lookForReferencingVocabula = true;
 							}
 							if (!lookForReferencingVocabula || !showReferencingVocabula(fQuery)) {
-								tabPane.selectTab(mainTab);
 								updateQueryField(lookForReferencingVocabula ? fQuery.concat(" ") : fQuery, false);
+								showTranslation(Optional.of(fQuery), requestFormatterGT);
 							}
 						}
 					}
@@ -1153,6 +1154,8 @@ public class GUIController implements Initializable {
 	}
 	
 	private void render(Collection<Vocabula> vocabulas, String... textsToHighlight) {
+		LOGGER.debug("rendering {} with highlight {}",
+								 com.nicedev.util.Collections.toString(vocabulas, v -> v.headWord), Arrays.toString(textsToHighlight));
 		if (vocabulas.isEmpty()) {
 			tabPane.getActiveEngine().ifPresent(engine -> engine.loadContent(""));
 			return;
@@ -1180,12 +1183,12 @@ public class GUIController implements Initializable {
 	private String highlight(String bodyContent, String[] textsToHighlight) {
 		if (textsToHighlight == null || textsToHighlight.length == 0) return bodyContent;
 		String highlighted = Stream.of(textsToHighlight)
-				                     .map(s -> String.format("(%s)", Strings.escapeSymbols(s, "[()]")))
+				                     .map(s -> String.format("(?:%s)", Strings.escapeSymbols(s, "[()]")))
 				                     .collect(joining("|"));
-		highlighted = String.format("(%s)", highlighted);
 		if (highlighted.isEmpty()) return bodyContent;
+		highlighted = String.format("(%s)", highlighted);
 		// match tag's boundary or word's boundary inside tag
-		String highlightedMatch = String.format("(?i)(%s(?=</| ))|((?<=>| )%1$s)", highlighted);
+		String highlightedMatch = String.format("(?i)(?:%s(?=([^<>]+)?</b>))|(?:(?<=<b>([^<>])?)%1$s)", highlighted);
 		bodyContent = wrapInTag(bodyContent, highlightedMatch, "span", CLASS_HIGHLIGHTED);
 		return bodyContent;
 	}
