@@ -62,17 +62,27 @@ abstract public class GoogleRequestProxy {
 			try {
 				suffix = relevantSuffixes.takeLast();
 				possibleSuffixes.remove(suffix);
+				infoReject(e);
 			} catch (InterruptedException eTake) {
-				LOGGER.warn("Interrupted while rejecting host: {}", eTake.getMessage());
+				warnReject(eTake);
 			}
 		} else if (e.getMessage().contains("503")) try {
 			relevantSuffixes.takeLast();
+			infoReject(e);
 		} catch (InterruptedException eTake) {
-			LOGGER.warn("Interrupted while rejecting host: {}", eTake.getMessage());
+			warnReject(eTake);
 		}
 		if (relevantSuffixes.size() <= 10)
 			enumHosts();
-		LOGGER.warn("Rejecting host ({} left): {}%n", relevantSuffixes.size(), e.getCause().getMessage());
+	}
+	
+	private void warnReject(InterruptedException e) {
+		LOGGER.warn("Interrupted while rejecting host: {}", e.getMessage());
+	}
+	
+	private void infoReject(Exception e) {
+		LOGGER.info("Rejecting host ({} left): {}. {}n",
+								relevantSuffixes.size(), e.getMessage(), e.getCause().getMessage());
 	}
 	
 	String nextHost() {
@@ -84,7 +94,9 @@ abstract public class GoogleRequestProxy {
 		} catch (InterruptedException e) {
 			LOGGER.info("Interrupted while switching to next host: {}", e.getCause());
 		}
-		return String.format(HOST_NAME_FMT, suffix);
+		String nextHost = String.format(HOST_NAME_FMT, suffix);
+		LOGGER.info("redirecting to {}", nextHost);
+		return nextHost;
 	}
 	
 	HttpURLConnection getRequestConnection(String request) throws IOException {

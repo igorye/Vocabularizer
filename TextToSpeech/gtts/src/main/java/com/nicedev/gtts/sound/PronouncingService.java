@@ -25,6 +25,7 @@ public class PronouncingService extends Thread {
 	private final TTSRequestProxy requestProxy;
 	private final boolean showDebug;
 	private final ExecutorService saveExecutor = Executors.newSingleThreadExecutor();
+	private Appender appender = new Appender();
 	private final CachingAgent cAgent;
 	private final BlockingQueue<PronunciationData> pronouncingQueue;
 	private final BlockingQueue<PronunciationData> saveQueue;
@@ -39,8 +40,9 @@ public class PronouncingService extends Thread {
 	private boolean hasInput = true;
 	private StoppableSoundPlayer activePlayer = new AudioController();
 	private volatile boolean stoppedPlaying = false;
-
-
+	private volatile Object interruptee;
+	
+	
 	public PronouncingService(boolean showDebug) {
 		this(10, showDebug);
 	}
@@ -57,7 +59,6 @@ public class PronouncingService extends Thread {
 		cAgent = new CachingAgent();
 		setName("PronouncingService");
 		start();
-		
 	}
 	
 	private static Collection<String> split(String line, String splitter, int nextRule) {
@@ -134,17 +135,7 @@ public class PronouncingService extends Thread {
 	}
 
 	public void pronounce(String wordsToPronounce, int delay) {
-		if (wordsToPronounce.trim().isEmpty()) return;
-		stoppedPlaying = false;
-		try {
-			String accent = wordsToPronounce.contains("://") ? null : getActualAccent();
-			for(String words: split(wordsToPronounce, "\n", 0))
-				pronouncingQueue.put(new PronunciationData(words, accent, delay, 98));
-		} catch (InterruptedException e) {
-			interrupted = true;
-			stoppedPlaying = true;
-			LOGGER.trace("pronounce interrupted");
-		}
+		appender.append(wordsToPronounce, delay);
 	}
 
 	public void save(String toPronounce, String outFileName) {
@@ -181,9 +172,10 @@ public class PronouncingService extends Thread {
 
 	public void clear() {
 		stoppedPlaying = true;
+		activePlayer.stop();
+		appender.clear();
 		pronouncingQueue.clear();
 		cacheQueue.clear();
-		activePlayer.stop();
 		cache.clear();
 	}
 
@@ -192,12 +184,14 @@ public class PronouncingService extends Thread {
 		while (!interrupted && hasSomeData()) {
 			try {
 				PronunciationData toPronounce = cacheQueue.take();
-				if (!stoppedPlaying)
+				if (!stoppedPlaying) {
 					if (toPronounce.pronunciationSource.contains("://"))
 						pronounceURL(toPronounce);
 					else
 						pronounceGTTS(toPronounce);
+				}
 			} catch (InterruptedException e) {
+				if (interruptee != null) continue;
 				if(cAgent.isAlive()) cAgent.interrupt();
 				requestProxy.release();
 				break;
@@ -209,6 +203,8 @@ public class PronouncingService extends Thread {
 	}
 	
 	private boolean hasSomeData() {
+		LOGGER.debug("hasInput = {}, cacheQueue.isEmpty = {}, pronouncingQueue.isEmpty = {}",
+								 hasInput,cacheQueue.isEmpty(), pronouncingQueue.isEmpty());
 		return hasInput || !cacheQueue.isEmpty() || !pronouncingQueue.isEmpty();
 	}
 	
@@ -338,4 +334,38 @@ public class PronouncingService extends Thread {
 		
 	}
 	
+	private class Appender {
+		
+		private Thread instance = new Thread();
+		
+		Appender() {}
+		
+		void append(String wordsToPronounce, int delay) {
+			instance.interrupt();
+			instance = new Thread(() -> {
+				if (wordsToPronounce.trim().isEmpty()) return;
+				stoppedPlaying = false;
+				try {
+					String accent = wordsToPronounce.contains("://") ? null : getActualAccent();
+					for (String words : split(wordsToPronounce, "\n", 0))
+						pronouncingQueue.put(new PronunciationData(words, accent, delay, 98));
+				} catch (InterruptedException e) {
+					if (interruptee != instance)
+						interrupted = true;
+					stoppedPlaying = true;
+					LOGGER.trace("pronounce interrupted");
+				} finally {
+					interruptee = null;
+				}
+			});
+			interruptee = instance;
+			instance.setDaemon(true);
+			instance.start();
+		}
+		
+		public void clear() {
+			instance.interrupt();
+			try { instance.join(); } catch (InterruptedException e) {/*NOP*/}
+		}
+	}
 }
