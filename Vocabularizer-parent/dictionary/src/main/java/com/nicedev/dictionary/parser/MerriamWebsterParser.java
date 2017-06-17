@@ -90,7 +90,7 @@ public class MerriamWebsterParser {
 			encodedEntry = Optional.of(URLEncoder.encode(filteredEntry, "UTF-8"));
 		} catch (UnsupportedEncodingException e) {
 			encodedEntry = Optional.empty();
-			LOGGER.error("Error occured while retrieving [{}]. Unable to generate request ({} {}).%n", entry, e.getMessage(), e.getCause());
+			LOGGER.error("Error occured while retrieving [{}]. Unable to generate request ({} {}).", entry, e.getMessage(), e.getCause());
 		}
 		String request = String.format(expositorRequestFmt, encodedEntry.orElse(entry), key);
 		try {
@@ -100,10 +100,10 @@ public class MerriamWebsterParser {
 			return extractVocabula(entry, xmlDoc, acceptSimilar);
 
 		} catch (SAXException | ParserConfigurationException | XPathExpressionException | NullPointerException e) {
-			LOGGER.error("Error occured while retrieving [{}]. Unable to parse  document. {}%n", entry,
+			LOGGER.error("Error occured while retrieving [{}]. Unable to parse  document. {}", entry,
 					Exceptions.getPackageStackTrace(e, "com.nicedev"));
 		} catch (IOException e) {
-			LOGGER.error("Error occured while retrieving [{}]. No response to request ({} {})%n", entry, e.getMessage(), e.getCause());
+			LOGGER.error("Error occured while retrieving [{}]. No response to request ({} {})", entry, e.getMessage(), e.getCause());
 		}
 		return Collections.emptySet();
 	}
@@ -494,14 +494,14 @@ public class MerriamWebsterParser {
 			if (synonyms.isEmpty() && !rootNode.getNodeName().equals("dt") && rootNode.getParentNode() != null)
 				return findSynonyms(rootNode.getParentNode());
 		} catch (XPathExpressionException e) {
-			LOGGER.error("Failed to find synonyms {}%n", Exceptions.getPackageStackTrace(e, "com.nicedev"));
+			LOGGER.error("Failed to find synonyms {}", Exceptions.getPackageStackTrace(e, "com.nicedev"));
 		}
 		return synonyms;
 	}
 
 	private Set<String> findUseCases(Node rootNode) {
 		String[] useCasesTags = {"vi", "un/vi", "snote/vi", "utxt/vi"};
-		Set<String> useCases = new HashSet<>();
+		Set<String> useCases = new LinkedHashSet<>();
 		for (String useCasesTag : useCasesTags)
 			try {
 				NodeList ucNodes = (NodeList) xPath.evaluate(useCasesTag, rootNode, NODESET);
@@ -511,28 +511,16 @@ public class MerriamWebsterParser {
 						.map(this::toSplitBTag)
 						.forEach(useCases::add);
 			} catch (XPathExpressionException e) {
-				LOGGER.error("Failed to find usecases. {}%n", Exceptions.getPackageStackTrace(e, "com.nicedev"));
+				LOGGER.error("Failed to find usecases. {}", Exceptions.getPackageStackTrace(e, "com.nicedev"));
 			}
 		return useCases;
 	}
 	
+	// transform collocation embraced in <b>...</b> into separate "<b>"-embraced tokens,
+	// e.g. "<b>tok1, tok2, tok3</b>" -> "<b>tok1</b>, <b>tok2</b>, <b>tok3</b>"
 	private String toSplitBTag(String s) {
 		return Html.splitTagContents(s, "b", "[,;] ");
 	}
-	
-	// transform collocation embraced in <b>...</b> into separate "<b>"-embraced tokens,
-	// e.g. "<b>tok1, tok2, tok3</b>" -> "<b>tok1</b>, <b>tok2</b>, <b>tok3</b>"
-	/*private String toSplitBTag(String source) {
-		if (!source.matches(".*<b>[^<>]+(([,;] )[^<>]+)+</b>.*")) return source;
-		String result = source;
-		Matcher matcher = Pattern.compile("(<b>[^<>]+(([,;] )[^<>]+)+</b>)").matcher(source);
-		while (matcher.find()) {
-			String definitionVariants = matcher.group(1);
-			String delimiter = matcher.group(3);
-			result = result.replace(definitionVariants, definitionVariants.replaceAll(delimiter, String.format("</b>%s <b>", delimiter)));
-		}
-		return result;
-	}*/
 	
 	private SearchResult findUsageNote(Node rootNode) throws XPathExpressionException {
 		Optional<Node> node = Optional.ofNullable((Node) xPath.evaluate("un", rootNode, NODE));
@@ -619,7 +607,7 @@ public class MerriamWebsterParser {
 					return true;
 			}
 		} catch (XPathExpressionException e) {
-			LOGGER.error("Failed to find definitions {}%n", Exceptions.getPackageStackTrace(e, "com.nicedev"));
+			LOGGER.error("Failed to find definitions {} {}", e, Exceptions.getPackageStackTrace(e, "com.nicedev"));
 		}
 		return false;
 	}
@@ -661,8 +649,8 @@ public class MerriamWebsterParser {
 			}
 			return res.toString();
 		} catch (IOException e) {
-			LOGGER.error("Error has occurred while retrieving contents at %s. %s%n",
-					uRequest, Exceptions.getPackageStackTrace(e, "com.nicedev"));
+			LOGGER.error("Error has occurred while retrieving contents at {}.\n{}. {}",
+					uRequest, e, Exceptions.getPackageStackTrace(e, "com.nicedev"));
 		}
 		return null;
 	}

@@ -2,6 +2,7 @@ package com.nicedev.dictionary.model;
 
 import com.nicedev.util.Comparators;
 import com.nicedev.util.*;
+import javafx.application.Platform;
 import javafx.concurrent.Service;
 import javafx.concurrent.Task;
 import javafx.concurrent.WorkerStateEvent;
@@ -242,6 +243,10 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 	}
 	
 	public void alter(Collection<Vocabula> vocabulas) {
+		if (IndexingService.this.getState() != State.SUCCEEDED) {
+			restart();
+			return;
+		}
 		Task<Void> alteringTask = new Task<Void>() {
 			@Override
 			protected Void call() throws Exception {
@@ -251,7 +256,7 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 			}
 		};
 		alteringTask.setOnSucceeded(succeededHandler);
-		alteringTask.run();
+		Platform.runLater(alteringTask);
 	}
 	
 	public Collection<String> findReferences(String pattern) {
