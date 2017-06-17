@@ -36,7 +36,6 @@ import javafx.scene.input.*;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import javafx.util.Callback;
-import javafx.util.Duration;
 import netscape.javascript.JSObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +51,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.Collections;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
@@ -182,7 +182,6 @@ public class GUIController implements Initializable {
 					                                          .sorted(Comparators.partialMatchComparator(selectedItem, true))
 					                                          .collect(toList());
 			hwData.setAll(referencesAtSelected);
-			event.getSource().cancel();
 		});
 		return task;
 	}
@@ -198,7 +197,6 @@ public class GUIController implements Initializable {
 		DelayedTaskService<Collection<String>> task = new DelayedTaskService<>(queryFilterTaskProvider, INPUT_FILTERING_DELAY);
 		task.setOnSucceeded(event -> {
 			if (tabPane.getSelectedTabIndex() == 0) hwData.setAll((Collection<String>) event.getSource().getValue());
-			event.getSource().cancel();
 		});
 		return task;
 	}
@@ -207,7 +205,8 @@ public class GUIController implements Initializable {
 	public void initialize(URL location, ResourceBundle resources) {
 		pronouncingService = new PronouncingService(100, false);
 		loadDictionary();
-		parsers = new MerriamWebsterParser[]{new MerriamWebsterParser(dictionary, false), new MerriamWebsterParser(dictionary, true)};
+		parsers = new MerriamWebsterParser[]{new MerriamWebsterParser(dictionary, false),
+																				 new MerriamWebsterParser(dictionary, true)};
 		localLanguage = Locale.getDefault().getLanguage();
 		foreignLanguage = dictionary.language.shortName;
 		queryBox.setValue("");
@@ -391,7 +390,7 @@ public class GUIController implements Initializable {
 	
 	private void engageFiltering(String pattern, int delay) {
 		queryBoxFiltering.setFilter(pattern);
-		queryBoxFiltering.setDelay(Duration.millis(delay));
+		queryBoxFiltering.setDelay(delay);
 	}
 	
 	private final Callback<TableColumn<String, String>, TableCell<String, String>> filteredCellFactory =
@@ -638,15 +637,15 @@ public class GUIController implements Initializable {
 	 ************************************/
 	
 	private void resetCache() {
-//		Platform.runLater(() -> {
-		referencesCache.clear();
-		referencesCache.putPersistent(findReferences(ALL_MATCH));
-		try {
-			ofNullable(mainTab.getText()).filter(Strings::isBlank).ifPresent(val -> hwData.setAll(findReferences(val)));
-		} catch (Exception e) {
-			LOGGER.error("reset cache: unexpected exception - {} | {}", e, Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
-		}
-//		});
+		Platform.runLater(() -> {
+			referencesCache.clear();
+			referencesCache.putPersistent(findReferences(ALL_MATCH));
+			try {
+				ofNullable(mainTab.getText()).filter(Strings::isBlank).ifPresent(val -> hwData.setAll(findReferences(val)));
+			} catch (Exception e) {
+				LOGGER.error("reset cache: unexpected exception - {} | {}", e, Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
+			}
+		});
 	}
 	
 	private void updateTableState() {
@@ -657,6 +656,7 @@ public class GUIController implements Initializable {
 	private void updateTableState(boolean searching) {
 		Platform.runLater(() -> {
 			String failedSearchMarker = " ";
+			hwTable.refresh();
 			hwTable.setPlaceholder(searching ? SEARCHING
 								                       : queryBoxValue.getValue().endsWith(failedSearchMarker)
 										                         ? NOTHING_FOUND : NO_MATCH);
@@ -677,10 +677,10 @@ public class GUIController implements Initializable {
 	}
 	
 	private void setSceneCursor(Cursor cursor) {
-//		Platform.runLater(() -> {
-		tabPane.setCursor(cursor);
-		tabPane.getActiveTab().getContent().setCursor(cursor);
-//		});
+		Platform.runLater(() -> {
+			tabPane.setCursor(cursor);
+			tabPane.getActiveTab().getContent().setCursor(cursor);
+		});
 	}
 	
 	
@@ -792,21 +792,23 @@ public class GUIController implements Initializable {
 	}
 	
 	private void updateQueryField(String text, boolean filterActive) {
-		boolean filterState = filterOn;
-		filterOn = filterActive;
-		if (filterActive) {
-			if (tabPane.getSelectedTabIndex() > 0) tabPane.selectTab(mainTab);
-			if (relevantSelectionOwner != queryBox) queryBox.requestFocus();
-			mainTab.setText(text);
-		}
-		int textLength = queryBoxValue.getValue().length();
-		int newCaretPos = caretPos == textLength ? text.length() : caretPos == 0 ? caretPos + 1 : caretPos;
-		synchronized (queryBox) {
-			queryBox.editorProperty().getValue().setText(text);
-			queryBox.editorProperty().get().positionCaret(newCaretPos);
-			caretPos = queryBox.editorProperty().get().getCaretPosition();
-		}
-		filterOn = filterState;
+		Platform.runLater(() -> {
+			boolean filterState = filterOn;
+			filterOn = filterActive;
+			if (filterActive) {
+				if (tabPane.getSelectedTabIndex() > 0) tabPane.selectTab(mainTab);
+				if (relevantSelectionOwner != queryBox) queryBox.requestFocus();
+				mainTab.setText(text);
+			}
+			int textLength = queryBoxValue.getValue().length();
+			int newCaretPos = caretPos == textLength ? text.length() : caretPos == 0 ? caretPos + 1 : caretPos;
+			synchronized (queryBox) {
+				queryBox.editorProperty().getValue().setText(text);
+				queryBox.editorProperty().get().positionCaret(newCaretPos);
+				caretPos = queryBox.editorProperty().get().getCaretPosition();
+			}
+			filterOn = filterState;
+		});
 	}
 	
 	private String getSelectedText() {
@@ -923,88 +925,98 @@ public class GUIController implements Initializable {
 		if (!queriedTabPresent) {
 			updateTableState();
 			setSceneCursor(Cursor.WAIT);
-			getQueryHandlingTask(validatedQuery, textsToHighlight).run();
+			executor.submit(getQueryHandlingTask(validatedQuery, textsToHighlight));
 		}
 	}
 	
-	private Task<Void> getQueryHandlingTask(String query, String... textsToHighlight) {
-		return new Task<Void>() {
-			@Override
-			protected Void call() {
-				boolean changeOccurred = false;
-				try {
-					int defCount = dictionary.getDefinitionsCount();
-					boolean acceptSimilar = query.startsWith("~");
-					// skip com.nicedev.com.nicedev.dictionary.model querying if "~" flag present
-					Optional<Vocabula> optVocabula = acceptSimilar ? Optional.empty() : dictionary.getVocabula(query);
-					final String fQuery = query.replaceAll("~", "").trim();
-					if (optVocabula.isPresent()) {
-						showQueryResult(optVocabula.get(), textsToHighlight);
-						appendRequestHistory(fQuery);
-					} else {
-						acceptSimilar |= toggleSimilar.isSelected();
-						Set<Vocabula> vocabulas = findVocabula(fQuery, acceptSimilar);
-						Function<Set<Vocabula>, Set<Vocabula>> availableOf = vocabulaSet -> {
-							return dictionary.getVocabulas(vocabulaSet.stream().map(voc -> voc.headWord).collect(toSet()));
-						};
-						Set<Vocabula> availableVs = availableOf.apply(vocabulas);
-						int nAdded = dictionary.addVocabulas(vocabulas);
-						if (!vocabulas.isEmpty() && nAdded > 0) {
-							updateCount++;
-							Set<Vocabula> addedVs = availableOf.apply(vocabulas);
-							addedVs.removeAll(availableVs);
-							hwData.setAll(addedVs.stream().map(v -> v.headWord).collect(toList()));
-							if (nAdded == 1 && hwData.contains(fQuery)) {
-								showQueryResult(addedVs.iterator().next(), textsToHighlight);
-							} else {
-								tabPane.removeTab(fQuery);
-								tabPane.selectTab(mainTab);
-							}
-							updateQueryField(fQuery, false);
-							appendRequestHistory(fQuery);
-							indexer.alter(addedVs);
-							resetCache();
+	private Runnable getQueryHandlingTask(String query, String... textsToHighlight) {
+		return ()-> {
+			boolean changeOccurred = false;
+			try {
+				int defCount = dictionary.getDefinitionsCount();
+				boolean acceptSimilar = query.startsWith("~");
+				// skip dictionary querying if "~" flag present
+				Optional<Vocabula> optVocabula = acceptSimilar ? Optional.empty() : dictionary.getVocabula(query);
+				final String fQuery = query.replaceAll("~", "").trim();
+				if (optVocabula.isPresent()) {
+					showQueryResult(optVocabula.get(), textsToHighlight);
+					appendRequestHistory(fQuery);
+				} else {
+					acceptSimilar |= toggleSimilar.isSelected();
+					Set<Vocabula> vocabulas = findVocabula(fQuery, acceptSimilar);
+					Function<Set<Vocabula>, Set<Vocabula>> availableOf = vocabulaSet -> {
+						return dictionary.getVocabulas(vocabulaSet.stream().map(voc -> voc.headWord).collect(toSet()));
+					};
+					Set<Vocabula> availableVs = availableOf.apply(vocabulas);
+					int nAdded = dictionary.addVocabulas(vocabulas);
+					if (!vocabulas.isEmpty() && nAdded > 0) {
+						updateCount++;
+						Set<Vocabula> addedVs = availableOf.apply(vocabulas);
+						addedVs.removeAll(availableVs);
+						Platform.runLater(() -> hwData.setAll(addedVs.stream().map(v -> v.headWord).collect(toList())));
+						if (nAdded == 1 && hwData.contains(fQuery)) {
+							showQueryResult(addedVs.iterator().next(), textsToHighlight);
 						} else {
-							List<String> suggestions = getSuggestions(fQuery);
-							boolean lookForReferencingVocabula = false;
-							if (!suggestions.isEmpty()) {
-								hwData.setAll(suggestions);
-								String suggested = suggestions.get(0);
-								if (suggestions.size() == 1 && Strings.partEquals(suggested, fQuery)) {
-									dictionary.getVocabula(suggested).ifPresent(vocabula -> showQueryResult(vocabula, fQuery));
-								} else {
-									lookForReferencingVocabula = true;
-								}
+							Platform.runLater(() -> { tabPane.removeTab(fQuery); tabPane.selectTab(mainTab); });
+						}
+						updateQueryField(fQuery, false);
+						appendRequestHistory(fQuery);
+						Platform.runLater(()-> indexer.alter(addedVs));
+						resetCache();
+					} else {
+						List<String> suggestions = getSuggestions(fQuery);
+						boolean lookForReferencingVocabula = false;
+						if (!suggestions.isEmpty()) {
+							Platform.runLater(() -> hwData.setAll(suggestions));
+							String suggested = suggestions.get(0);
+							if (suggestions.size() == 1 && Strings.partEquals(suggested, fQuery)) {
+								dictionary.getVocabula(suggested).ifPresent(vocabula -> showQueryResult(vocabula, fQuery));
 							} else {
 								lookForReferencingVocabula = true;
 							}
-							if (!lookForReferencingVocabula || !showReferencingVocabula(fQuery)) {
-								updateQueryField(lookForReferencingVocabula ? fQuery.concat(" ") : fQuery, false);
-								if (suggestions.isEmpty()) showTranslation(Optional.of(fQuery), requestFormatterGT);
-							}
+						} else {
+							lookForReferencingVocabula = true;
+						}
+						if (!lookForReferencingVocabula || !showReferencingVocabula(fQuery)) {
+							updateQueryField(lookForReferencingVocabula ? fQuery.concat(" ") : fQuery, false);
+							if (suggestions.isEmpty())
+								Platform.runLater(() -> showTranslation(Optional.of(fQuery), requestFormatterGT));
 						}
 					}
-					if (changeOccurred = (defCount != dictionary.getDefinitionsCount())) updateStatistics(false);
-				} catch (Exception e) {
-					LOGGER.error(Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
-				} finally {
-					if (changeOccurred) saveDictionary();
-					updateTableState(false);
-					setSceneCursor(Cursor.DEFAULT);
 				}
-				return null;
+				if (changeOccurred = (defCount != dictionary.getDefinitionsCount())) updateStatistics(false);
+			} catch (Exception e) {
+				LOGGER.error(Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
+			} finally {
+				if (changeOccurred) saveDictionary();
+				updateTableState(false);
+				setSceneCursor(Cursor.DEFAULT);
 			}
 		};
 	}
 	
 	private boolean showReferencingVocabula(String referenced) {
-		Optional<Vocabula> referencingVocabula = indexer.getReferencingVocabula(referenced);
+		Task<Optional<Vocabula>> task = new Task<Optional<Vocabula>>() {
+			@Override
+			protected Optional<Vocabula> call() throws Exception {
+				return indexer.getReferencingVocabula(referenced);
+			}
+		};
+		Platform.runLater(task);
+		Optional<Vocabula> referencingVocabula;
+		try {
+			referencingVocabula = task.get();
+		} catch (InterruptedException | ExecutionException e) {
+			LOGGER.warn("Error has occurred showing referencing vocabula: {} {}",
+									e, Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
+			return false;
+		}
 		if (referencingVocabula.isPresent()) {
 			showQueryResult(referencingVocabula.get(), referenced);
-			Platform.runLater(() -> appendRequestHistory(referenced));
+			appendRequestHistory(referenced);
 			return true;
 		}
-		return false;
+		return referencingVocabula.isPresent();
 	}
 	
 	@SuppressWarnings("unused")
@@ -1014,18 +1026,20 @@ public class GUIController implements Initializable {
 	}
 	
 	private void appendRequestHistory(String query) {
-		if (Strings.isBlank(query)) return;
-		boolean oldState = filterOn;
-		filterOn = false;
-		int index;
-		while((index = queryBox.getItems().indexOf(query)) >= 0) queryBox.getItems().remove(index);
-		queryBox.getItems().add(0, query);
-		filterOn = oldState;
-		queryBox.getSelectionModel().select(0);
+		Platform.runLater(() -> {
+			if (Strings.isBlank(query)) return;
+			boolean oldState = filterOn;
+			filterOn = false;
+			int index;
+			while ((index = queryBox.getItems().indexOf(query)) >= 0) queryBox.getItems().remove(index);
+			queryBox.getItems().add(0, query);
+			filterOn = oldState;
+			queryBox.getSelectionModel().select(0);
+		});
 	}
 	
 	private void showQueryResult(Vocabula vocabula, String... textsToHighlight) {
-		showQueryResultImpl(vocabula, textsToHighlight);
+		Platform.runLater(() -> showQueryResultImpl(vocabula, textsToHighlight));
 	}
 	
 	private void showQueryResultImpl(Vocabula vocabula, String... textsToHighlight) {
@@ -1094,8 +1108,10 @@ public class GUIController implements Initializable {
 	}
 	
 	private void updateStatistics(boolean invalidateIndex) {
-		stats.setText(dictionary.toString());
-		if (invalidateIndex) indexer.restart();
+		Platform.runLater(() -> {
+			stats.setText(dictionary.toString());
+			if (invalidateIndex) indexer.restart();
+		});
 	}
 	
 	private String removeGaps(String queryText) {
@@ -1165,7 +1181,9 @@ public class GUIController implements Initializable {
 			}
 			bodyContent = highlight(bodyContent, textsToHighlight);
 			bodyContent = injectAnchors(bodyContent);
+			LOGGER.debug("body content:\n{}", bodyContent);
 			String htmlContent = String.format(contentFmt, cssHref, jsHref, bodyContent);
+			LOGGER.debug("resulting content:\n{}", htmlContent);
 			engine.loadContent(htmlContent);
 			tabPane.getActiveTab().getContent().requestFocus();
 		});
