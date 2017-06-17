@@ -9,7 +9,7 @@
         <version>0.1-dev</version>
     </parent>
     
-    <artifactId>expositor</artifactId>
+    <artifactId>dictionary</artifactId>
     <version>0.1-dev</version>
     <packaging>jar</packaging>
     

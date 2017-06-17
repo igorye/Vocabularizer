@@ -1,4 +1,4 @@
-package com.nicedev.dictionary;
+package com.nicedev.dictionary.model;
 
 
 import com.nicedev.util.Strings;
@@ -60,7 +60,7 @@ public class Dictionary implements Serializable{
 			out.writeObject(dict);
 			return true;
 		} catch (IOException e) {
-			LOGGER.error("Error has occured while saving com.nicedev.dictionary: {}", e.getMessage());
+			LOGGER.error("Error has occured while saving com.nicedev.com.nicedev.dictionary.model: {}", e.getMessage());
 		}
 		return false;
 	}

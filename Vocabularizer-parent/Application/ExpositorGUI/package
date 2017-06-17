@@ -18,7 +18,7 @@ OS name: "windows 7", version: "6.1", arch: "x86", family: "dos"
 [DEBUG]   Imported: org.apache.maven.execution < plexus.core
 [DEBUG]   Imported: org.apache.maven.execution.scope < plexus.core
 [DEBUG]   Imported: org.apache.maven.lifecycle < plexus.core
-[DEBUG]   Imported: org.apache.maven.model < plexus.core
+[DEBUG]   Imported: org.apache.maven.com.nicedev.dictionary.model < plexus.core
 [DEBUG]   Imported: org.apache.maven.monitor < plexus.core
 [DEBUG]   Imported: org.apache.maven.plugin < plexus.core
 [DEBUG]   Imported: org.apache.maven.profiles < plexus.core

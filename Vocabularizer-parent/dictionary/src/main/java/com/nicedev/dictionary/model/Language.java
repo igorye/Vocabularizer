@@ -1,4 +1,4 @@
-package com.nicedev.dictionary;
+package com.nicedev.dictionary.model;
 
 import java.io.*;
 import java.util.Arrays;
@@ -143,7 +143,7 @@ public class Language implements Serializable, Comparable {
 		final int[] i = {1};
 		synchronized(partsOfSpeech) {
 			partsOfSpeech.keySet().forEach( p -> langProps.put(String.format("name%d", i[0]++),p));
-		};
+		}
 		String userHome = System.getProperties().getProperty("user.home");
 		String projectHome = System.getProperties().getProperty("Vocabularizer.home", userHome + "\\vocabularizer");
 		try (OutputStream out = new FileOutputStream(new File(projectHome, String.format("%s.properties", langName)))) {

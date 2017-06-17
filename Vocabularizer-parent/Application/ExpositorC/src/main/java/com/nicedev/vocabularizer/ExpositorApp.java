@@ -1,9 +1,9 @@
 package com.nicedev.vocabularizer;
 
-import com.nicedev.dictionary.Vocabula;
+import com.nicedev.dictionary.model.Vocabula;
 import com.nicedev.gtts.sound.PronouncingService;
-import com.nicedev.dictionary.Dictionary;
-import com.nicedev.expositor.MerriamWebster.Expositor;
+import com.nicedev.dictionary.model.Dictionary;
+import com.nicedev.dictionary.parser.MerriamWebsterParser;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
@@ -27,7 +27,7 @@ public class ExpositorApp {
 	private static final String PROJECT_HOME = System.getProperty(PROJECT_NAME + ".home", String.format("%s\\%s", USER_HOME, PROJECT_NAME));
 	private static final String storageEn = String.format("%s\\%s.dict", PROJECT_HOME, "english");
 	static private PronouncingService pronouncingService;
-	static private Expositor[] expositors;
+	static private MerriamWebsterParser[] expositors;
 	static private Dictionary dictionary;
 
 //  enum Command {DELETE, LIST, EXPLAIN, FIND}
@@ -35,7 +35,7 @@ public class ExpositorApp {
 	public static void main(String[] args) {
 		loadDictionary();
 		pronouncingService = new PronouncingService(5, false);
-		expositors = new Expositor[]{new Expositor(dictionary, false), new Expositor(dictionary, true)};
+		expositors = new MerriamWebsterParser[]{new MerriamWebsterParser(dictionary, false), new MerriamWebsterParser(dictionary, true)};
 		System.out.println(dictionary);
 		Scanner input;
 		input = (args.length > 0) ? new Scanner(args[0]) : new Scanner(System.in);
@@ -111,7 +111,7 @@ public class ExpositorApp {
 			Dictionary.save(dictionary, storageEn);
 			pronouncingService.release();
 		}
-		//Dictionary.save(com.nicedev.dictionary, storageEn);
+		//Dictionary.save(com.nicedev.com.nicedev.dictionary.model, storageEn);
 	}
 
 	private static void loadDictionary() {

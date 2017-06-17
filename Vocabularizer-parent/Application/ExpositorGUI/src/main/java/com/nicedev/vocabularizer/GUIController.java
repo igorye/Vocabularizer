@@ -1,9 +1,9 @@
 package com.nicedev.vocabularizer;
 
-import com.nicedev.dictionary.Dictionary;
-import com.nicedev.dictionary.IndexingService;
-import com.nicedev.dictionary.Vocabula;
-import com.nicedev.expositor.MerriamWebster.Expositor;
+import com.nicedev.dictionary.model.Dictionary;
+import com.nicedev.dictionary.model.IndexingService;
+import com.nicedev.dictionary.model.Vocabula;
+import com.nicedev.dictionary.parser.MerriamWebsterParser;
 import com.nicedev.gtts.sound.PronouncingService;
 import com.nicedev.util.*;
 import com.nicedev.util.Comparators;
@@ -105,7 +105,7 @@ public class GUIController implements Initializable {
 	private final Label NO_MATCH = new Label("No matches");
 	private final Label SEARCHING = new Label("Searching...");
 	
-	public static final String BASE_PACKAGE = "com.nicedev";
+	private static final String BASE_PACKAGE = "com.nicedev";
 	private final String PROJECT_NAME = "Vocabularizer";
 	private final String USER_HOME = System.getProperties().getProperty("user.home");
 	private final String PROJECT_HOME = System.getProperty(PROJECT_NAME + ".home", String.format("%s\\%s", USER_HOME, PROJECT_NAME));
@@ -135,7 +135,7 @@ public class GUIController implements Initializable {
 	private String foreignLanguage;
 	private int updateCount = 0;
 	private PronouncingService pronouncingService;
-	private Expositor[] expositors;
+	private MerriamWebsterParser[] parsers;
 	private Dictionary dictionary;
 	private boolean autoPronounce = true;
 	private QueuedCache<String, Collection<String>> referencesCache;
@@ -207,7 +207,7 @@ public class GUIController implements Initializable {
 	public void initialize(URL location, ResourceBundle resources) {
 		pronouncingService = new PronouncingService(100, false);
 		loadDictionary();
-		expositors = new Expositor[]{new Expositor(dictionary, false), new Expositor(dictionary, true)};
+		parsers = new MerriamWebsterParser[]{new MerriamWebsterParser(dictionary, false), new MerriamWebsterParser(dictionary, true)};
 		localLanguage = Locale.getDefault().getLanguage();
 		foreignLanguage = dictionary.language.shortName;
 		queryBox.setValue("");
@@ -637,14 +637,6 @@ public class GUIController implements Initializable {
 	 *  utility methods                  *
 	 ************************************/
 	
-	private String composeRE(String text) {
-		return (!toggleRE.isSelected())
-				       ? Stream.of(text.split("(?=\\p{Punct})"))
-						         .map(s -> (s.matches("\\p{Punct}.*")) ? "\\".concat(s) : s)
-						         .collect(joining())
-				       : text;
-	}
-	
 	private void resetCache() {
 //		Platform.runLater(() -> {
 		referencesCache.clear();
@@ -663,13 +655,13 @@ public class GUIController implements Initializable {
 	}
 	
 	private void updateTableState(boolean searching) {
-//		Platform.runLater(() -> {
+		Platform.runLater(() -> {
 			String failedSearchMarker = " ";
 			hwTable.setPlaceholder(searching ? SEARCHING
 								                       : queryBoxValue.getValue().endsWith(failedSearchMarker)
 										                         ? NOTHING_FOUND : NO_MATCH);
 			hwTable.refresh();
-//		});
+		});
 	}
 	
 	private void engageTableSelectedItemFiltering() {
@@ -685,10 +677,10 @@ public class GUIController implements Initializable {
 	}
 	
 	private void setSceneCursor(Cursor cursor) {
-		Platform.runLater(() -> {
+//		Platform.runLater(() -> {
 		tabPane.setCursor(cursor);
 		tabPane.getActiveTab().getContent().setCursor(cursor);
-		});
+//		});
 	}
 	
 	
@@ -943,7 +935,7 @@ public class GUIController implements Initializable {
 				try {
 					int defCount = dictionary.getDefinitionsCount();
 					boolean acceptSimilar = query.startsWith("~");
-					// skip com.nicedev.dictionary querying if "~" flag present
+					// skip com.nicedev.com.nicedev.dictionary.model querying if "~" flag present
 					Optional<Vocabula> optVocabula = acceptSimilar ? Optional.empty() : dictionary.getVocabula(query);
 					final String fQuery = query.replaceAll("~", "").trim();
 					if (optVocabula.isPresent()) {
@@ -988,7 +980,7 @@ public class GUIController implements Initializable {
 							}
 							if (!lookForReferencingVocabula || !showReferencingVocabula(fQuery)) {
 								updateQueryField(lookForReferencingVocabula ? fQuery.concat(" ") : fQuery, false);
-								showTranslation(Optional.of(fQuery), requestFormatterGT);
+								if (suggestions.isEmpty()) showTranslation(Optional.of(fQuery), requestFormatterGT);
 							}
 						}
 					}
@@ -1117,9 +1109,9 @@ public class GUIController implements Initializable {
 	
 	@SuppressWarnings("unchecked")
 	private Set<Vocabula> findVocabula(String query, boolean acceptSimilar) {
-		return Stream.of(expositors)
+		return Stream.of(parsers)
 				       .parallel()
-				       .map(expositor -> new Object[] {expositor.priority, expositor.getVocabula(query, acceptSimilar)})
+				       .map(parser -> new Object[] {parser.priority, parser.getVocabula(query, acceptSimilar)})
 				       .sorted(Comparator.comparingInt(tuple -> (int) tuple[0]))
 				       .flatMap(tuple -> ((Collection<Vocabula>) tuple[1]).stream())
 				       .collect(LinkedHashSet::new, Set::add, Set::addAll);
@@ -1145,8 +1137,8 @@ public class GUIController implements Initializable {
 	}
 	
 	private List<String> getSuggestions(String match) {
-		return getStream(asList(expositors), ALLOW_PARALLEL_STREAM)
-				       .flatMap(expositor -> expositor.getRecentSuggestions().stream())
+		return getStream(asList(parsers), ALLOW_PARALLEL_STREAM)
+				       .flatMap(parser -> parser.getRecentSuggestions().stream())
 				       .distinct()
 				       .sorted(startsWithCmpr(match).thenComparing(indexOfCmpr(match)))
 				       .filter(Strings::notBlank)

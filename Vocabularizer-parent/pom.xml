@@ -11,7 +11,7 @@
 	
 	<modules>
 		<module>Application</module>
-		<module>expositor</module>
+		<module>dictionary</module>
 	</modules>
 	
 	

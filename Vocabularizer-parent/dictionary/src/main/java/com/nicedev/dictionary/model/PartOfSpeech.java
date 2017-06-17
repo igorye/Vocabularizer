@@ -1,4 +1,4 @@
-package com.nicedev.dictionary;
+package com.nicedev.dictionary.model;
 
 import java.io.Serializable;
 
