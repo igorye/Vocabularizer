@@ -39,7 +39,7 @@ public class PronouncingService extends Thread {
 	private final Map<String, PronunciationSaver> savers;
 	private boolean hasInput = true;
 	private StoppableSoundPlayer activePlayer = new AudioController();
-	private volatile boolean stoppedPlaying = false;
+	private volatile boolean playingStopped = false;
 	private volatile Object interruptee;
 	
 	
@@ -95,7 +95,7 @@ public class PronouncingService extends Thread {
 			Clip clip = AudioSystem.getClip();
 			activePlayer = new AudioController(clip);
 			clip.open(audioInputStream);
-			if(!stoppedPlaying)
+			if (!playingStopped)
 				clip.start();
 			clip.addLineListener(clipStopHandler(clip));
 		} catch (IOException | UnsupportedAudioFileException | LineUnavailableException | NullPointerException e) {
@@ -119,7 +119,7 @@ public class PronouncingService extends Thread {
 			Player playerMP3 = new Player(pronunciationStream);
 			if (showDebug) System.err.println(pronunciationData);
 			activePlayer = new AudioController(playerMP3);
-			if(!stoppedPlaying)
+			if (!playingStopped)
 				playerMP3.play();
 			Thread.sleep(pronunciationData.delayAfter);
 			cache.remove(pronunciationData);
@@ -171,12 +171,14 @@ public class PronouncingService extends Thread {
 	}
 
 	public void clear() {
-		stoppedPlaying = true;
-		activePlayer.stop();
+		playingStopped = true;
 		appender.clear();
 		pronouncingQueue.clear();
 		cacheQueue.clear();
 		cache.clear();
+		activePlayer.stop();
+		LOGGER.debug("pronouncingQueue.size={}, cacheQueue.size={}, cache.size={}",
+		             pronouncingQueue.size(), cacheQueue.size(), cache.size());
 	}
 
 	public void run() {
@@ -184,7 +186,7 @@ public class PronouncingService extends Thread {
 		while (!interrupted && hasSomeData()) {
 			try {
 				PronunciationData toPronounce = cacheQueue.take();
-				if (!stoppedPlaying) {
+				if (!playingStopped) {
 					if (toPronounce.pronunciationSource.contains("://"))
 						pronounceURL(toPronounce);
 					else
@@ -342,17 +344,15 @@ public class PronouncingService extends Thread {
 			instance.interrupt();
 			instance = new Thread(() -> {
 				if (wordsToPronounce.trim().isEmpty()) return;
-				stoppedPlaying = false;
+				playingStopped = false;
 				try {
 					String accent = wordsToPronounce.contains("://") ? null : getActualAccent();
 					for (String words : split(wordsToPronounce, "\n", 0))
 						pronouncingQueue.put(new PronunciationData(words, accent, delay, 98));
 				} catch (InterruptedException e) {
-					if (interruptee != instance)
-						interrupted = true;
-					stoppedPlaying = true;
-					LOGGER.trace("pronounce interrupted");
+					if (interruptee != instance) interrupted = true;
 				} finally {
+					LOGGER.trace("pronounce interrupted. pronouncingQueue.size={}", pronouncingQueue.size());
 					interruptee = null;
 				}
 			});
@@ -363,7 +363,10 @@ public class PronouncingService extends Thread {
 		
 		public void clear() {
 			instance.interrupt();
-			try { instance.join(); } catch (InterruptedException e) {/*NOP*/}
+			try {
+				instance.join();
+				LOGGER.debug("Appender cleared");
+			} catch (InterruptedException e) {/*NOP*/}
 		}
 	}
 }

@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import com.nicedev.vocabularizer.gui.WebTabPane?>
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+<AnchorPane prefHeight="500.0" prefWidth="700.0" xmlns="http://javafx.com/javafx/8.0.40"
+						xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.nicedev.vocabularizer.GUIController">
+	<children>
+		<Label fx:id="stats" alignment="CENTER" contentDisplay="CENTER" focusTraversable="false" graphicTextGap="0.0"
+					 layoutX="444.0" layoutY="478.0" mouseTransparent="true" nodeOrientation="LEFT_TO_RIGHT" prefHeight="26.0"
+					 prefWidth="209.0" textAlignment="JUSTIFY" textOverrun="CENTER_ELLIPSIS" wrapText="true"
+					 AnchorPane.bottomAnchor="0.0" AnchorPane.rightAnchor="0.0">
+			<opaqueInsets>
+				<Insets/>
+			</opaqueInsets>
+			<padding>
+				<Insets left="5.0" right="5.0"/>
+			</padding>
+		</Label>
+		<WebTabPane fx:id="tabPane" focusTraversable="false" tabMaxWidth="120.0" tabMinWidth="60.0"
+								AnchorPane.bottomAnchor="30.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0"
+								AnchorPane.topAnchor="0.0">
+			<tabs>
+				<Tab fx:id="mainTab" closable="false" text="">
+					<content>
+						<TableView fx:id="hwTable" fixedCellSize="22.0" onKeyPressed="#onTableViewKeyPressed"
+											 onKeyReleased="#onHWTVKeyReleased" onMouseClicked="#onMouseClicked"
+											 onMousePressed="#onTableMousePressed" onMouseReleased="#onTableMouseReleased" prefHeight="-1"
+											 prefWidth="200.0">
+							<columns>
+								<TableColumn fx:id="hwColumn" editable="false" minWidth="-1.0" prefWidth="300.0"
+														 style="-fx-padding: 0 0 0 10;" text="Headword"/>
+								<TableColumn fx:id="posColumn" editable="false" minWidth="-1.0" prefWidth="300.0"
+														 style="-fx-padding: 0 0 0 10;" text="Part of speech"/>
+							</columns>
+						</TableView>
+					</content>
+				</Tab>
+			</tabs>
+		</WebTabPane>
+		<ToggleButton fx:id="toggleSound" blendMode="SRC_ATOP" focusTraversable="false" layoutX="1.0" layoutY="474.0"
+									mnemonicParsing="false" onAction="#toggleSound" prefHeight="25.0" prefWidth="27.0"
+									style="-fx-background-image: url(soundOn.png); -fx-background-size: contain;"
+									AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="1.0">
+			<tooltip>
+				<Tooltip text="Mute pronunciation" textOverrun="WORD_ELLIPSIS" wrapText="true">
+					<font>
+						<Font size="13.0"/>
+					</font>
+				</Tooltip>
+			</tooltip>
+		</ToggleButton>
+		<ToggleButton fx:id="toggleShowParts" blendMode="SRC_ATOP" focusTraversable="false" graphicTextGap="0.0"
+									layoutX="28.0" layoutY="483.0" mnemonicParsing="false" onAction="#toggleShowParts" prefHeight="25.0"
+									prefWidth="27.0" selected="true" text="[ ]" wrapText="true" AnchorPane.bottomAnchor="1.0"
+									AnchorPane.leftAnchor="28.0">
+			<tooltip>
+				<Tooltip text="Show parts of speech" textOverrun="WORD_ELLIPSIS" wrapText="true">
+					<font>
+						<Font size="13.0"/>
+					</font>
+				</Tooltip>
+			</tooltip>
+		</ToggleButton>
+		<ToggleButton fx:id="toggleRE" layoutX="55.0" layoutY="474.0" focusTraversable="false" mnemonicParsing="false"
+									prefHeight="25.0" prefWidth="27.0" text="RE" textAlignment="CENTER" textOverrun="CLIP"
+									onAction="#toggleUseRE" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="55.0">
+			<font>
+				<Font size="10.0"/>
+			</font>
+			<tooltip>
+				<Tooltip text="use RegEx">
+					<font>
+						<Font size="13.0"/>
+					</font>
+				</Tooltip>
+			</tooltip>
+		</ToggleButton>
+		<ToggleButton fx:id="toggleSimilar" layoutX="82.0" layoutY="474.0" focusTraversable="false" mnemonicParsing="false"
+									prefHeight="25.0" prefWidth="27.0" text="~" textAlignment="CENTER" textOverrun="CLIP"
+									onAction="#toggleAcceptSimilar" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="82.0"
+									selected="false">
+			<font>
+				<Font size="10.0"/>
+			</font>
+			<tooltip>
+				<Tooltip text="Accept similar matches">
+					<font>
+						<Font size="13.0"/>
+					</font>
+				</Tooltip>
+			</tooltip>
+		</ToggleButton>
+		<Button focusTraversable="false" layoutX="109.0" layoutY="474.0" mnemonicParsing="false" onAction="#onSearch"
+						prefHeight="25.0" prefWidth="27.0"
+						style="-fx-background-image: url(search.png); -fx-background-size: 23px; -fx-background-repeat: no-repeat; -fx-background-position: center;"
+						AnchorPane.bottomAnchor="1.0">
+			<tooltip>
+				<Tooltip text="Find definition" textOverrun="WORD_ELLIPSIS" wrapText="true">
+					<font>
+						<Font size="13.0"/>
+					</font>
+				</Tooltip>
+			</tooltip>
+		</Button>
+		<ComboBox fx:id="queryBox" editable="true" layoutX="136.0" layoutY="474.0" onKeyReleased="#onQueryBoxKeyReleased"
+							prefHeight="25.0" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="136.0"
+							AnchorPane.rightAnchor="222.0"/>
+	</children>
+</AnchorPane>

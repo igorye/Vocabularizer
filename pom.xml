@@ -5,14 +5,14 @@
 	<modelVersion>4.0.0</modelVersion>
 	
 	<groupId>com.nicedev</groupId>
-	<artifactId>parent</artifactId>
+	<artifactId>vacbularizer-parent</artifactId>
 	<version>0.1-dev</version>
 	<packaging>pom</packaging>
 	
 	<!--<modules>
 			<module>util</module>
 			<module>TextToSpeech</module>
-			<module>Vocabularizer-parent</module>
+			<module>Vocabularizer</module>
 	</modules>-->
 	
 	<properties>
