@@ -92,6 +92,8 @@ public class GUIController implements Initializable {
 	@FXML
 	private TableColumn<String, String> posColumn;
 	@FXML
+	private TableColumn<String, String> formsColumn;
+	@FXML
 	private Label stats;
 	@FXML
 	private ComboBox<String> queryBox;
@@ -267,6 +269,7 @@ public class GUIController implements Initializable {
 		hwColumn.setCellFactory(filteredCellFactory);
 		hwColumn.setCellValueFactory(hwCellValueFactory);
 		posColumn.setCellValueFactory(posCellValueFactory);
+		formsColumn.setCellValueFactory(formsCellValueFactory);
 		mainScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> ctrlIsDown = event.isControlDown());
 		mainScene.addEventFilter(KeyEvent.KEY_RELEASED, event -> ctrlIsDown = event.isControlDown());
 		tabPane.focusedProperty().addListener(tabPaneFocusChangeListener);
@@ -405,6 +408,13 @@ public class GUIController implements Initializable {
 					                                     .filter(PoS -> PoS.partName.matches("[\\p{Lower} ,]+"))
 					                                     .map(PoS -> PoS.partName)
 					                                     .collect(joining(", ")));
+
+	private final Callback<CellDataFeatures<String, String>, ObservableValue<String>> formsCellValueFactory =
+			param -> new ReadOnlyObjectWrapper<>(dictionary.getVocabula(param.getValue())
+					                                     .map(v -> v.getKnownForms().stream()
+							                                               .distinct()
+							                                               .collect(joining(", ")))
+					                                     .orElse(""));
 
 	private final Callback<CellDataFeatures<String, String>, ObservableValue<String>> hwCellValueFactory =
 			param -> new ReadOnlyObjectWrapper<>(param.getValue());
@@ -732,7 +742,7 @@ public class GUIController implements Initializable {
 			newTab = new ExpositorTab(title);
 			newTab.setOnSelected(comparedFirstSelectionListener());
 		} else {
-			newTab = new ExpositorTab(title, dictionary.getVocabula(title));
+			newTab = new ExpositorTab(title, dictionary.findVocabula(title));
 			newTab.setOnSelected(vocabulaFirstSelectionHandler(highlights));
 		}
 		newTab.addHandlers(viewHndlrsSetter);
@@ -763,7 +773,7 @@ public class GUIController implements Initializable {
 				Collection<Vocabula> compared = Stream.of(headwords)
 						                                .map(String::trim)
 						                                .map(s -> dictionary.containsVocabula(s)
-								                                          ? dictionary.getVocabula(s)
+								                                          ? dictionary.findVocabula(s)
 								                                          : indexer.getReferencingVocabula(s))
 						                                .filter(Optional::isPresent)
 						                                .map(Optional::get)
@@ -957,7 +967,7 @@ public class GUIController implements Initializable {
 				int defCount = dictionary.getDefinitionsCount();
 				boolean acceptSimilar = query.startsWith("~");
 				// skip dictionary querying if "~" flag present
-				Optional<Vocabula> optVocabula = acceptSimilar ? Optional.empty() : dictionary.getVocabula(query);
+				Optional<Vocabula> optVocabula = acceptSimilar ? Optional.empty() : dictionary.findVocabula(query);
 				final String fQuery = query.replaceAll("~", "").trim();
 				if (optVocabula.isPresent()) {
 					showQueryResult(optVocabula.get(), textsToHighlight);
@@ -997,7 +1007,7 @@ public class GUIController implements Initializable {
 							Platform.runLater(() -> hwData.setAll(suggestions));
 							String suggested = suggestions.get(0);
 							if (suggestions.size() == 1 && Strings.partEquals(suggested, fQuery)) {
-								dictionary.getVocabula(suggested).ifPresent(vocabula -> showQueryResult(vocabula, fQuery));
+								dictionary.findVocabula(suggested).ifPresent(vocabula -> showQueryResult(vocabula, fQuery));
 							} else {
 								lookForReferencingVocabula = true;
 							}
@@ -1163,7 +1173,7 @@ public class GUIController implements Initializable {
 			return;
 		}
 		selection.ifPresent(s -> {
-			Optional<Vocabula> optVocabula = dictionary.getVocabula(s);
+			Optional<Vocabula> optVocabula = dictionary.findVocabula(s);
 			pronouncingService.clear();
 			optVocabula.ifPresent(vocabula -> {
 				Platform.runLater(() -> pronouncingService.pronounce(vocabula.toString().replaceAll("[<>]", "")));

@@ -308,10 +308,14 @@ public class Dictionary implements Serializable {
 	}
 
 	public boolean containsVocabula(String headword) {
-		return getVocabula(headword).isPresent();
+		return findVocabula(headword).isPresent();
 	}
 
 	public Optional<Vocabula> getVocabula(String headword) {
+		return Optional.ofNullable(articles.get(headword));
+	}
+
+	public Optional<Vocabula> findVocabula(String headword) {
 		if (headword.isEmpty()) return Optional.empty();
 		if (isCached(headword)) return Optional.ofNullable(cachedResponse);
 		List<String> candidates = articles.keySet().stream()
@@ -331,5 +335,4 @@ public class Dictionary implements Serializable {
 	private boolean isCached(String headWord) {
 		return Objects.nonNull(cachedResponse) && Objects.nonNull(cachedRequest) && cachedRequest.equals(headWord);
 	}
-
 }

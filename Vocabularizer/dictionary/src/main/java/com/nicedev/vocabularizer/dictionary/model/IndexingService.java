@@ -283,6 +283,7 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 			Predicate<String> regExMatchPredicate = s -> !isRegex || s.matches(validPattern);
 			return pattern.isEmpty()
 					       ? Streams.getStream(getIndex().keySet(), ALLOW_PARALLEL)
+							         .filter(s -> source.getVocabula(s).map(vocabula -> vocabula.hasDecentDefinition()).orElse(true))
 							         .sorted(Comparator.naturalOrder())
 							         .collect(toList())
 								 : Streams.getStream(getIndex().keySet(), ALLOW_PARALLEL)
@@ -310,7 +311,7 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 				       .filter(hw -> findReferences(hw.toLowerCase()).contains(
 						       headWord))////todo: try matching employing replacing def1/def2 -> def1|def2 or suchlike
 				       .findFirst()
-				       .flatMap(hw -> source.getVocabula(hw));
+				       .flatMap(hw -> source.findVocabula(hw));
 	}
 
 }

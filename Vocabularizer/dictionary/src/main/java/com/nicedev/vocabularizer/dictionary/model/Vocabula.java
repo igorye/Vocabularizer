@@ -203,7 +203,7 @@ public class Vocabula implements Serializable, Comparable {
 			String partOfSpeechName = partOfSpeech.partName;
 			if (partOfSpeechName.equals(PartOfSpeech.UNDEFINED)) partOfSpeechName = "";
 			res.append(format("  : %s%n", partOfSpeechName));
-			Set<String> forms = getKnownForms(partOfSpeech);
+			Collection<String> forms = getKnownForms(partOfSpeech);
 			if (!forms.isEmpty())
 				res.append(format("   form%s: ", forms.size() > 1 ? "s" : ""))
 						.append(forms.stream().collect(joining(", "))).append("\n");
@@ -220,7 +220,7 @@ public class Vocabula implements Serializable, Comparable {
 			String partOfSpeechName = partOfSpeech.partName;
 			if (partOfSpeechName.equals(PartOfSpeech.UNDEFINED)) partOfSpeechName = "";
 			res.append(format("<div class=\"partofspeech\"><span style=\"none\">:</span> %s", partOfSpeechName));
-			Set<String> forms = getKnownForms(partOfSpeech);
+			Collection<String> forms = getKnownForms(partOfSpeech);
 			if (!forms.isEmpty())
 				res.append(format("<div>form%s: ", forms.size() > 1 ? "s" : ""))
 						.append("<b>").append(forms.stream().collect(joining("</b>, <b>"))).append("</b></div>\n");
@@ -252,18 +252,22 @@ public class Vocabula implements Serializable, Comparable {
         return res.toString();
     }*/
 
-	public Set<String> getKnownForms(PartOfSpeech partOfSpeech) {
-		return partOfSpeech.partName.equals(PartOfSpeech.ANY)
-				       ? knownForms.values().stream().flatMap(Collection::stream).collect(Collectors.toSet())
-				       : knownForms.getOrDefault(partOfSpeech, Collections.emptySet());
+	public Collection<String> getKnownForms(PartOfSpeech partOfSpeech) {
+		Collection<String> forms = partOfSpeech.partName.equals(PartOfSpeech.ANY)
+				                           ? knownForms.values().stream()
+						                             .flatMap(Collection::stream)
+						                             .distinct()
+						                             .sorted().collect(Collectors.toList())
+				                           : knownForms.getOrDefault(partOfSpeech, Collections.emptySet());
+		return Collections.unmodifiableCollection(forms);
 	}
 	
 	/*public Set<String> getKnownForms(String partOfSpeechName) {
 		return getKnownForms(new PartOfSpeech(language, partOfSpeechName));
 	}*/
 
-	public Set<String> getKnownForms() {
-		return getKnownForms(new PartOfSpeech(language, PartOfSpeech.ANY));
+	public Collection<String> getKnownForms() {
+		return getKnownForms(language.getPartOfSpeech(PartOfSpeech.ANY));
 	}
 	
 	/*public void addSynonym(String definition, String synonym) {

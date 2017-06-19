@@ -70,7 +70,7 @@ public class ExpositorApp {
 				if (query.startsWith("::")) {
 					query = query.substring(2, query.length()).trim();
 					System.out.println(dictionary.explainVocabula(query));
-					Optional<Vocabula> queried = dictionary.getVocabula(query);
+					Optional<Vocabula> queried = dictionary.findVocabula(query);
 					queried.ifPresent(ExpositorApp::pronounce);
 					continue;
 				} else if (query.startsWith(":")) {
@@ -83,7 +83,7 @@ public class ExpositorApp {
 				query = Stream.of(tokens).filter(notEmpty).map(String::trim).findFirst().orElse("");
 				boolean acceptSimilar = query.startsWith("~");
 				if (acceptSimilar) query = query.substring(1, query.length());
-				Optional<Vocabula> vocabula = acceptSimilar ? Optional.empty() : dictionary.getVocabula(query);
+				Optional<Vocabula> vocabula = acceptSimilar ? Optional.empty() : dictionary.findVocabula(query);
 				if (!vocabula.isPresent()) {
 					acceptSimilar |= ACCEPT_SIMILAR;
 					Collection<Vocabula> vocabulas = findVocabula(query, acceptSimilar);
