@@ -110,7 +110,7 @@ public class MerriamWebsterParser {
 		return Collections.emptySet();
 	}
 
-	private class SearchResult implements Comparable<SearchResult> {
+	private static class SearchResult implements Comparable<SearchResult> {
 		final String entry;
 		final Node foundAt;
 		final boolean perfectMatch;
@@ -430,10 +430,10 @@ public class MerriamWebsterParser {
 					for (int j = 0, first = 0; j < definitions.length; j++) {
 						if (definitions[j].trim().isEmpty()) {
 							first++;
-							continue;
+						} else {
+							if (j > first) defBuilder.append("; ");
+							defBuilder.append(definitions[j].trim());
 						}
-						if (j > first) defBuilder.append("; ");
-						defBuilder.append(definitions[j].trim());
 					}
 					Node useCasesRoot = currNode.getParentNode();
 					SearchResult usageNote = findUsageNote(currNode.getParentNode());

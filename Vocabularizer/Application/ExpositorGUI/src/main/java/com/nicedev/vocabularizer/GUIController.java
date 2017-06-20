@@ -855,8 +855,8 @@ public class GUIController implements Initializable {
 		EventHandler<ActionEvent> handleQueryEH = this::onSearch;
 		GUIUtil.addMenuItem("Explain", handleQueryEH, contextMenu);
 		// headwords comparing available only from tableView
-		boolean isNewContextSubmenu = contextMenu instanceof ContextMenu;
-		if (isNewContextSubmenu && selectedHWItems.size() > 1) {
+		boolean appendingToTableViewContextMenu = contextMenu instanceof ContextMenu;
+		if (appendingToTableViewContextMenu && selectedHWItems.size() > 1) {
 			EventHandler<ActionEvent> compareHeadwordsEH = e -> compareHeadwords();
 			GUIUtil.addMenuItem("Compare", compareHeadwordsEH, contextMenu);
 		}
@@ -876,13 +876,14 @@ public class GUIController implements Initializable {
 		EventHandler<ActionEvent> pronounceHeadwordEH = e -> pronounce(context);
 		EventHandler<ActionEvent> pronounceArticleEH = e -> pronounce(context, true);
 
-		Menu pronounce = new Menu("Pronounce");
-		String title = !isNewContextSubmenu ? " headword" : "Pronounce";
-		Object parentCM = !isNewContextSubmenu ? pronounce : contextMenu;
-		GUIUtil.addMenuItem(title, pronounceHeadwordEH, parentCM);
-		if (!isNewContextSubmenu) {
+		boolean showExtendedPronounceMenu = !appendingToTableViewContextMenu && tabPane.getActiveTab() instanceof ExpositorTab;
+		if (showExtendedPronounceMenu) {
+			Menu pronounce = new Menu("Pronounce");
+			GUIUtil.addMenuItem(" headword", pronounceHeadwordEH, pronounce);
 			GUIUtil.addMenuItem(" article", pronounceArticleEH, pronounce);
 			GUIUtil.addMenuItem(pronounce, contextMenu);
+		} else {
+			GUIUtil.addMenuItem("Pronounce", pronounceHeadwordEH, contextMenu);
 		}
 
 		GUIUtil.addMenuItem("", null, contextMenu);
