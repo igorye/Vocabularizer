@@ -5,8 +5,8 @@
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 <?import javafx.scene.text.Font?>
-<AnchorPane prefHeight="500.0" prefWidth="750.0" xmlns="http://javafx.com/javafx/8.0.40"
-						xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.nicedev.vocabularizer.GUIController">
+<AnchorPane xmlns:fx="http://javafx.com/fxml/1" prefHeight="500.0" prefWidth="750.0"
+						xmlns="http://javafx.com/javafx/8.0.40" fx:controller="com.nicedev.vocabularizer.GUIController">
 	<children>
 		<Label fx:id="stats" alignment="CENTER" contentDisplay="CENTER" focusTraversable="false" graphicTextGap="0.0"
 					 layoutX="444.0" layoutY="478.0" mouseTransparent="true" nodeOrientation="LEFT_TO_RIGHT" prefHeight="26.0"
@@ -26,15 +26,15 @@
 				<Tab fx:id="mainTab" closable="false" text="">
 					<content>
 						<TableView fx:id="hwTable" fixedCellSize="22.0" onKeyPressed="#onTableViewKeyPressed"
-											 onKeyReleased="#onHWTVKeyReleased" onMouseClicked="#onMouseClicked"
+											 onKeyReleased="#onTableViewKeyReleased" onMouseClicked="#onMouseClicked"
 											 onMousePressed="#onTableMousePressed" onMouseReleased="#onTableMouseReleased" prefHeight="-1"
 											 prefWidth="200.0">
 							<columns>
-								<TableColumn fx:id="hwColumn" editable="false" minWidth="-1.0" prefWidth="250.0"
+								<TableColumn fx:id="hwColumn" editable="false" minWidth="-1.0" prefWidth="245.0"
 														 style="-fx-padding: 0 0 0 10;" text="Headword"/>
-								<TableColumn fx:id="formsColumn" editable="false" minWidth="-1.0" prefWidth="250.0"
+								<TableColumn fx:id="formsColumn" editable="false" minWidth="-1.0" prefWidth="246.0"
 														 style="-fx-padding: 0 0 0 10;" text="Forms"/>
-								<TableColumn fx:id="posColumn" editable="false" minWidth="-1.0" prefWidth="250.0"
+								<TableColumn fx:id="posColumn" editable="false" minWidth="-1.0" prefWidth="246.0"
 														 style="-fx-padding: 0 0 0 10;" text="Part of speech"/>
 							</columns>
 						</TableView>
