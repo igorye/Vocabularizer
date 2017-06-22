@@ -257,7 +257,7 @@ public class Vocabula implements Serializable, Comparable {
 				                           ? knownForms.values().stream()
 						                             .flatMap(Collection::stream)
 						                             .distinct()
-						                             .sorted().collect(Collectors.toList())
+						                             .collect(Collectors.toList())
 				                           : knownForms.getOrDefault(partOfSpeech, Collections.emptySet());
 		return Collections.unmodifiableCollection(forms);
 	}
