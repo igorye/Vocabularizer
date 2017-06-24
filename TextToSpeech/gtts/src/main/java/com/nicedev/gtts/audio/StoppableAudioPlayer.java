@@ -1,8 +1,8 @@
-package com.nicedev.gtts.sound;
+package com.nicedev.gtts.audio;
 
 /**
  * Facade interface for stopping different players
  */
-interface StoppableSoundPlayer {
+public interface StoppableAudioPlayer {
 	void stop();
 }

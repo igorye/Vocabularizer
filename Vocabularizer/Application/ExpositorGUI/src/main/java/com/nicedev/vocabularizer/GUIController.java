@@ -1,6 +1,7 @@
 package com.nicedev.vocabularizer;
 
-import com.nicedev.gtts.sound.PronouncingService;
+import com.nicedev.gtts.service.TTSPlaybackService;
+import com.nicedev.gtts.service.TTSService;
 import com.nicedev.util.*;
 import com.nicedev.util.Comparators;
 import com.nicedev.vocabularizer.dictionary.model.Dictionary;
@@ -137,7 +138,7 @@ public class GUIController implements Initializable {
 	private String localLanguage;
 	private String foreignLanguage;
 	private int updatesCount = 0;
-	private PronouncingService pronouncingService;
+	private TTSService pronouncingService;
 	private MerriamWebsterParser[] parsers;
 	private Dictionary dictionary;
 	private boolean autoPronounce = true;
@@ -207,7 +208,7 @@ public class GUIController implements Initializable {
 
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
-		pronouncingService = new PronouncingService(100, false);
+		pronouncingService = new TTSPlaybackService(100);
 		loadDictionary();
 		parsers = new MerriamWebsterParser[] { new MerriamWebsterParser(dictionary, false),
 		                                       new MerriamWebsterParser(dictionary, true) };
@@ -304,7 +305,7 @@ public class GUIController implements Initializable {
 		LOGGER.info("stop: terminating executor");
 		executor.shutdownNow();
 		LOGGER.info("stop: clearing pronouncingService");
-		pronouncingService.clear();
+		pronouncingService.release();
 		LOGGER.info("stop: terminating pronouncingService");
 		pronouncingService.release(0);
 		LOGGER.info("stop: saving recents");
@@ -345,9 +346,9 @@ public class GUIController implements Initializable {
 
 	private final ChangeListener<Tab> tabSelectionListener = (observable, oldValue, newValue) -> {
 //		synchronized (tabPane) {
-			filterOn = tabPane.getSelectedTabIndex() == 0;
-			String caption = filterOn ? newValue.getText() : newValue.getTooltip().getText();
-			updateQueryBoxText(caption, false);
+		filterOn = tabPane.getSelectedTabIndex() == 0;
+		String caption = filterOn ? newValue.getText() : newValue.getTooltip().getText();
+		updateQueryBoxText(caption, false);
 //		}
 		Platform.runLater(() -> {
 			if (!filterOn || relevantSelectionOwner != queryBox) {
@@ -587,7 +588,7 @@ public class GUIController implements Initializable {
 		toggleSound.setStyle("-fx-background-image: url('" + (autoPronounce ? "soundOn.png" : "soundOff.png") + "');"
 				                     + "-fx-background-size: contain;");
 		queryBox.requestFocus();
-		pronouncingService.clear();
+		pronouncingService.clearQueue();
 	}
 
 	@FXML
@@ -656,7 +657,7 @@ public class GUIController implements Initializable {
 			try {
 				ofNullable(mainTab.getText()).filter(Strings::isBlank).ifPresent(val -> hwData.setAll(findReferences(val)));
 			} catch (Exception e) {
-				LOGGER.error("reset cache: unexpected exception - {} | {}", e,
+				LOGGER.error("clearQueue cache: unexpected exception - {} | {}", e,
 				             Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
 			}
 		});
@@ -741,7 +742,7 @@ public class GUIController implements Initializable {
 				}
 			});
 		}
-		tab.setOnClosed(event -> pronouncingService.clear());
+		tab.setOnClosed(event -> pronouncingService.clearQueue());
 	};
 
 	private final BiFunction<String, String[], WebViewTab> expositorTabSupplier = (title, highlights) -> {
@@ -1103,11 +1104,11 @@ public class GUIController implements Initializable {
 		try (BufferedWriter bw = Files.newBufferedWriter(Paths.get(PROJECT_HOME, HISTORY_FILENAME), CREATE,
 		                                                 TRUNCATE_EXISTING)) {
 //			synchronized (queryBox) {
-				String history = queryBox.getItems().stream()
-						                 .distinct()
-						                 .filter(Strings::notBlank)
-						                 .collect(joining("\n"));
-				bw.write(history);
+			String history = queryBox.getItems().stream()
+					                 .distinct()
+					                 .filter(Strings::notBlank)
+					                 .collect(joining("\n"));
+			bw.write(history);
 //			}
 		} catch (IOException e) { /* NOP */ }
 	}
@@ -1202,36 +1203,36 @@ public class GUIController implements Initializable {
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 	private void pronounce(Optional<String> selection, boolean isArticle) {
-		pronouncingService.clear();
+		pronouncingService.clearQueue();
 		if (!isArticle) {
 			pronounce(selection);
 			return;
 		}
 		selection.ifPresent(s -> {
 			Optional<Vocabula> optVocabula = dictionary.findVocabula(s);
-			pronouncingService.clear();
+			pronouncingService.clearQueue();
 			optVocabula.ifPresent(vocabula -> {
-				Platform.runLater(() -> pronouncingService.pronounce(vocabula.toString().replaceAll("[<>]", "")));
+				Platform.runLater(() -> pronouncingService.enqueueAsync(vocabula.toString().replaceAll("[<>]", "")));
 			});
 		});
 	}
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 	private void pronounce(Optional<String> selection) {
-		pronouncingService.clear();
+		pronouncingService.clearQueue();
 		Platform.runLater(() -> {
-			pronouncingService.pronounce(selection.orElse(selectedHWItems.stream().collect(joining("\n"))),
-			                             PRONUNCIATION_DELAY);
+			pronouncingService.enqueueAsync(selection.orElse(selectedHWItems.stream().collect(joining("\n"))),
+			                                PRONUNCIATION_DELAY);
 		});
 	}
 
 	private void pronounce(Vocabula vocabula) {
 		if (!autoPronounce) return;
-		pronouncingService.clear();
+		pronouncingService.clearQueue();
 		Platform.runLater(() -> {
 			Iterator<String> sIt = vocabula.getPronunciationSources().iterator();
-			if (sIt.hasNext()) pronouncingService.pronounce(sIt.next(), PRONUNCIATION_DELAY);
-			else pronouncingService.pronounce(vocabula.headWord, PRONUNCIATION_DELAY);
+			if (sIt.hasNext()) pronouncingService.enqueue(sIt.next(), PRONUNCIATION_DELAY);
+			else pronouncingService.enqueue(vocabula.headWord, PRONUNCIATION_DELAY);
 		});
 
 	}

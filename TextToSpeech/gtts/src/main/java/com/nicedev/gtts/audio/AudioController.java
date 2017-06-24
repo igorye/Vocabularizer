@@ -1,17 +1,17 @@
-package com.nicedev.gtts.sound;
+package com.nicedev.gtts.audio;
 
 import javazoom.jl.player.Player;
 
 import javax.sound.sampled.Clip;
 
-public class AudioController implements StoppableSoundPlayer {
+public class AudioController implements StoppableAudioPlayer {
 	private final Object player;
 
-	AudioController(Object player) {
+	public AudioController(Object player) {
 		this.player = player;
 	}
 
-	AudioController() {
+	public AudioController() {
 		this(null);
 	}
 

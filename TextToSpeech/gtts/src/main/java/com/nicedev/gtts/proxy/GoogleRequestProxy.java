@@ -13,10 +13,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.BlockingDeque;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.*;
 
 abstract public class GoogleRequestProxy {
 	
@@ -30,7 +27,10 @@ abstract public class GoogleRequestProxy {
 	private int next = 0;
 	private boolean interrupted;
 	private volatile boolean proceedSuffixes = false;
-	
+	private int switches;
+	private int rejects;
+	private int enums;
+
 	GoogleRequestProxy(GTSRequest requestFmt) {
 		TTS_REQUEST_FMT = requestFmt;
 		executor = Executors.newFixedThreadPool(10, r -> {
@@ -38,7 +38,6 @@ abstract public class GoogleRequestProxy {
 			thread.setDaemon(true);
 			return thread;
 		});
-//		executor = Executors.newCachedThreadPool();
 		possibleSuffixes = Collections.synchronizedList(new ArrayList<>());
 		executor.execute(new SuffixEnumerator());
 		while (!proceedSuffixes) Thread.yield();
@@ -50,6 +49,8 @@ abstract public class GoogleRequestProxy {
 	public void release() {
 		interrupted = true;
 		executor.shutdownNow();
+		LOGGER.info("Terminating proxy. Switches - {}, rejects - {}, enumerations - {}",
+		            switches, rejects, enums);
 	}
 	
 	private void enumHosts() {
@@ -63,6 +64,7 @@ abstract public class GoogleRequestProxy {
 				suffix = relevantSuffixes.takeLast();
 				possibleSuffixes.remove(suffix);
 				infoReject(e);
+				rejects++;
 			} catch (InterruptedException eTake) {
 				warnReject(eTake);
 			}
@@ -72,8 +74,9 @@ abstract public class GoogleRequestProxy {
 		} catch (InterruptedException eTake) {
 			warnReject(eTake);
 		}
-		if (relevantSuffixes.size() <= 10)
+		if (relevantSuffixes.size() <= 10) {
 			enumHosts();
+		}
 	}
 	
 	private void warnReject(InterruptedException e) {
@@ -91,8 +94,10 @@ abstract public class GoogleRequestProxy {
 		try {
 			suffix = relevantSuffixes.take();
 			relevantSuffixes.put(suffix);
+			switches++;
 		} catch (InterruptedException e) {
-			LOGGER.info("Interrupted while switching to next host: {}", e.getCause());
+			LOGGER.info("Interrupted while switching to next host: {}", e);
+			return nextHost();
 		}
 		String nextHost = String.format(HOST_NAME_FMT, suffix);
 		LOGGER.info("redirecting to {}", nextHost);
@@ -121,9 +126,11 @@ abstract public class GoogleRequestProxy {
 	class AddrTester implements Runnable {
 		
 		private String domainSuffix;
-		
-		public AddrTester(String domainSuffix) {
+		private final CountDownLatch cdLatch;
+
+		AddrTester(String domainSuffix, CountDownLatch cdLatch) {
 			this.domainSuffix = domainSuffix;
+			this.cdLatch = cdLatch;
 		}
 		
 		private boolean isValidDomainSuffix() throws UnknownHostException {
@@ -156,15 +163,14 @@ abstract public class GoogleRequestProxy {
 					domainSuffix = "com." + domainSuffix;
 					if (isValidDomainSuffix() && connectionAvailable()) relevantSuffixes.add(domainSuffix);
 				} catch (IOException e) { /* NOP */ }
-			if (size != relevantSuffixes.size())
-				LOGGER.info("adding {}", String.format(GoogleRequestProxy.HOST_NAME_FMT, domainSuffix));
+			cdLatch.countDown();
 		}
 		
 	}
 	
 	class SuffixEnumerator implements Runnable {
 		
-		public static final String LOWER_CASE_ALPHABET = "abcdefghijklmnopqrstuvwxyz";
+		static final String LOWER_CASE_ALPHABET = "abcdefghijklmnopqrstuvwxyz";
 		
 		public void run() {
 			final char[] chars = LOWER_CASE_ALPHABET.toCharArray();
@@ -180,11 +186,18 @@ abstract public class GoogleRequestProxy {
 	}
 	
 	class HostEnumerator implements Runnable {
-		{
-			LOGGER.info("Enumerating hosts...");
-		}
+
 		public void run() {
-			possibleSuffixes.forEach(suffix -> executor.execute(new AddrTester(suffix)));
+			LOGGER.info("Enumerating hosts...");
+			CountDownLatch cdLatch = new CountDownLatch(possibleSuffixes.size());
+			possibleSuffixes.forEach(suffix -> executor.execute(new AddrTester(suffix, cdLatch)));
+			try {
+				cdLatch.await();
+				LOGGER.info("{} hosts available", relevantSuffixes.size());
+				enums++;
+			} catch (InterruptedException e) {
+				LOGGER.warn("Interrupted awaiting AddrTester. Found {} host available", relevantSuffixes.size());
+			}
 		}
 	}
 

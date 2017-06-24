@@ -1,7 +1,8 @@
 package com.nicedev.vocabularizer;
 
+import com.nicedev.gtts.service.TTSPlaybackService;
+import com.nicedev.gtts.service.TTSService;
 import com.nicedev.vocabularizer.dictionary.model.Vocabula;
-import com.nicedev.gtts.sound.PronouncingService;
 import com.nicedev.vocabularizer.dictionary.model.Dictionary;
 import com.nicedev.vocabularizer.dictionary.parser.MerriamWebsterParser;
 import org.slf4j.LoggerFactory;
@@ -29,13 +30,13 @@ public class ExpositorApp {
 	private static final String PROJECT_HOME = System.getProperty(PROJECT_NAME + ".home",
 	                                                              String.format("%s\\%s", USER_HOME, PROJECT_NAME));
 	private static final String storageEn = String.format("%s\\%s.dict", PROJECT_HOME, "english");
-	static private PronouncingService pronouncingService;
+	static private TTSService pronouncingService;
 	static private MerriamWebsterParser[] expositors;
 	static private Dictionary dictionary;
 
 	public static void main(String[] args) {
 		loadDictionary();
-		pronouncingService = new PronouncingService(5, false);
+		pronouncingService = new TTSPlaybackService(5);
 		expositors = new MerriamWebsterParser[] { new MerriamWebsterParser(dictionary, false),
 		                                          new MerriamWebsterParser(dictionary, true) };
 		System.out.println(dictionary);
@@ -113,7 +114,7 @@ public class ExpositorApp {
 			Dictionary.save(dictionary, storageEn);
 			pronouncingService.release();
 		}
-		//Dictionary.save(com.nicedev.com.nicedev.dictionary.model, storageEn);
+		//Dictionary.append(com.nicedev.com.nicedev.dictionary.model, storageEn);
 	}
 
 	private static void loadDictionary() {
@@ -168,10 +169,10 @@ public class ExpositorApp {
 	}
 
 	private static void pronounce(Vocabula vocabula) {
-		pronouncingService.clear();
+		pronouncingService.clearQueue();
 		Iterator<String> sIt = vocabula.getPronunciationSources().iterator();
-		if (sIt.hasNext()) pronouncingService.pronounce(sIt.next(), 500);
-		else pronouncingService.pronounce(vocabula.headWord, 500);
+		if (sIt.hasNext()) pronouncingService.enqueue(sIt.next(), 500);
+		else pronouncingService.enqueue(vocabula.headWord, 500);
 	}
 
 }

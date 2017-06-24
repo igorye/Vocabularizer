@@ -1,9 +1,14 @@
 package com.nicedev.tts;
 
-import com.nicedev.gtts.sound.PronouncingService;
+import com.nicedev.gtts.service.TTSPlaybackService;
+import com.nicedev.gtts.service.TTSSaverService;
+import com.nicedev.gtts.service.TTSService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.lang.invoke.MethodHandles;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
@@ -12,23 +17,27 @@ import java.util.concurrent.TransferQueue;
 
 
 public class PronouncerApp {
-	
+
+	private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
+
 	public static void main(String[] args) throws FileNotFoundException, InterruptedException {
+		long start = System.currentTimeMillis();
 		Map<String, String> mArgs = parseArgs(args);
 		if (mArgs.containsKey("-h")) {
 			showUsage();
 			return;
 		}
 		boolean bShowProgress = mArgs.containsKey("-p");
-		PronouncingService pronouncingService = new PronouncingService(5, bShowProgress);
 		String inFileName = mArgs.getOrDefault("-i", "");
 		boolean inIsFile = !inFileName.isEmpty();
 		String outFileName = mArgs.get("-o");
-		outFileName = outFileName == null ? "" : outFileName.isEmpty()
-				                                         ? getDefaultOutName(inFileName)
-				                                         : outFileName;
-		boolean outIsFile = !outFileName.isEmpty();
-		JobScheduler scheduler = new JobScheduler(pronouncingService, outIsFile ? outFileName : "");
+		outFileName = (outFileName == null || outFileName.isEmpty())
+				              ? getDefaultOutName(inFileName)
+				              : outFileName;
+		TTSService ttsService = mArgs.containsKey("-o")
+				                        ? new TTSSaverService(outFileName, 10, bShowProgress)
+				                        : new TTSPlaybackService(10, bShowProgress);
+		JobScheduler scheduler = new JobScheduler(ttsService, outFileName);
 		Scanner in = inIsFile ? new Scanner(new FileReader(inFileName)) : new Scanner(System.in);
 		StringBuilder spellingBuilder = new StringBuilder();
 		String line = "";
@@ -37,9 +46,9 @@ public class PronouncerApp {
 			try {
 				line = in.nextLine().trim();
 				switch (line) {
-					case "~"    : pronouncingService.switchAccent(); continue;
-					case "!~"   : pronouncingService.resetAccent(); continue;
-					default     : spellingBuilder.append(line).append(" ");
+					case "~"  : ttsService.switchAccent(); continue;
+					case "!~" : ttsService.resetAccent(); continue;
+					default   : spellingBuilder.append(line).append(" ");
 				}
 			} catch (NoSuchElementException e) {
 				continue;
@@ -52,10 +61,13 @@ public class PronouncerApp {
 		if (spellingBuilder.length() > 0 || !line.isEmpty()) {
 			scheduler.schedule(spellingBuilder.toString());
 		}
+		LOGGER.debug("releasing scheduler");
 		scheduler.release();
 		scheduler.join();
-		pronouncingService.release();
-		pronouncingService.join();
+		ttsService.release();
+		LOGGER.debug("releasing ttsService");
+		ttsService.join();
+		System.out.printf("%f%n", (System.currentTimeMillis() - start)/1000f);
 	}
 	
 	private static void showUsage() {
@@ -68,16 +80,15 @@ public class PronouncerApp {
 	}
 	
 	static class JobScheduler extends Thread {
-		
-		private final PronouncingService pronouncingService;
+
+		private final TTSService ttsService;
 		private final String outFileName;
-		public static final TransferQueue<String> jobQueue = new LinkedTransferQueue<>();
+		static final TransferQueue<String> jobQueue = new LinkedTransferQueue<>();
 		private volatile boolean inputIsEmpty = false;
-		
-		
-		public JobScheduler(PronouncingService worker, String outFileName) {
+
+		JobScheduler(TTSService worker, String outFileName) {
 			this.outFileName = outFileName;
-			this.pronouncingService = worker;
+			this.ttsService = worker;
 			setName("Scheduler");
 			start();
 		}
@@ -91,28 +102,28 @@ public class PronouncerApp {
 					request = split(toPronounce.replaceAll("`", "'").replaceAll("\\*", ""),"(?<=\\p{L}{2,}[\\\\.] )", 0);
 					for (String token : request)
 						if (!token.isEmpty()) {
-							int delay = token.trim().endsWith(".") ? 300 : token.trim().endsWith(",") ? 50 : 0;
-							if (outFileName.isEmpty()) pronouncingService.pronounce(token, delay);
-							else pronouncingService.save(token, outFileName);
+							int delay = token.trim().endsWith(".") ? 250 : token.trim().endsWith(",") ? 50 : 0;
+							ttsService.enqueue(token, delay);
 						}
 				} catch (InterruptedException e) {
+					LOGGER.debug("Interrupted while taking next job chunk");
 					break;
 				}
 			}
 			
 		}
 		
-		public void schedule(String work) {
+		void schedule(String work) {
 			try {
 				jobQueue.put(work);
 			} catch (InterruptedException e) {
-				e.printStackTrace();
+				LOGGER.warn("Interrupted while scheduling \"{}\"", work);
 			}
 		}
 		
-		public void release() {
+		void release() {
+			LOGGER.debug("releasing scheduler: jobQueue[{}]", jobQueue.size());
 			inputIsEmpty = true;
-			Thread.yield();
 			if (jobQueue.isEmpty()) interrupt();
 		}
 	}
@@ -128,38 +139,40 @@ public class PronouncerApp {
 	private static Map<String, String> parseArgs(String[] args) {
 		Map<String, String> mArgs = new LinkedHashMap<>();
 		boolean lookForValue = false;
-		String param = "";
+		String valueForKey = "";
 		for(String arg: args) {
-			if (arg.startsWith("-") && !lookForValue) {
-				param = arg;
-				if(!param.isEmpty()) mArgs.put(param, "");
-				lookForValue = true;
-				continue;
-			}
-			if (!param.isEmpty() && lookForValue && !arg.isEmpty() && !arg.startsWith("-")) {
-				mArgs.put(param, arg);
-				param = "";
-				lookForValue = false;
+			if (arg.startsWith("-")) {
+				valueForKey = arg;
+				mArgs.put(valueForKey, "");
+			} else {
+				mArgs.put(valueForKey, arg);
+				valueForKey = "";
 			}
 		}
 		return mArgs;
 	}
 	
 	private static Collection<String> split(String line, String splitter, int nextRule) {
-		String[] splitRules = {"(?<=\\\\.{2,3} )", "(?=\\()", "(?<=\\)[,:;]{0,1})", "(?> \'\\w+\' )",
-				"(?> \"\\w+\" )", "(?<=[,:;])", "(?= - )", "\\s"};
+		String[] splitRules = { "(?<=\\\\.{2,3} )",
+		                        "(?=\\()",
+		                        "(?<=\\)[,:;]{0,1})",
+		                        "(?> \'\\w+\' )",
+		                        "(?> \"\\w+\" )",
+		                        "(?<=[,:;])",
+		                        "(?= - )",
+		                        "\\s"};
 		List<String> res = new ArrayList<>();
-		String[] tokens = line.split(splitter);
-		for (String token: tokens) {
-			if (token.length() <= 200)
-				res.add(token.trim());
-			else {
+		for (String token: line.split(splitter)) {
+			if (token.length() <= 200) {
+				if (!token.trim().isEmpty())
+					res.add(token.trim());
+			} else {
 				Collection<String> shortTokens = split(token.replaceAll("\\s{2,}"," "), splitRules[nextRule], ++nextRule);
 				nextRule = 0;
 				StringBuilder tokenBuilder = new StringBuilder();
 				for(String shortToken: shortTokens) {
-					if(tokenBuilder.length() + shortToken.length() + 1 <= 200) {
-						if(tokenBuilder.length() != 0)
+					if (tokenBuilder.length() + shortToken.length() + 1 <= 200) {
+						if (tokenBuilder.length() != 0)
 							tokenBuilder.append(" ");
 					} else {
 						res.add(tokenBuilder.toString());
@@ -172,5 +185,5 @@ public class PronouncerApp {
 		}
 		return res;
 	}
-	
+
 }

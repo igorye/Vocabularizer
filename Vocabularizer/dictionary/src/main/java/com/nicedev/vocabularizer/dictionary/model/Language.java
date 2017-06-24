@@ -61,15 +61,16 @@ public class Language implements Serializable, Comparable {
 			partsOS.put(PartOfSpeech.UNDEFINED, new PartOfSpeech(this, PartOfSpeech.UNDEFINED));
 			partsOS.put(PartOfSpeech.COMPOSITE, new PartOfSpeech(this, PartOfSpeech.COMPOSITE));
 		} catch (IOException e) {
-			System.err.format("Unable to read language configuration. %s.properties file is corrupt or missing at" +
-					                  " %s. %n", langName, PROJECT_HOME);
+			LOGGER.error("Unable to read language configuration. {}.properties file is corrupt or missing at" +
+					                  " {}. \n", langName, PROJECT_HOME);
 		}
 		final int[] i = { 1 };
 		partsOS.keySet().forEach(p -> langProps.put(String.format("name%d", i[0]++), p));
 		try (OutputStream out = new FileOutputStream(new File(PROJECT_HOME, String.format("%s.properties", langName)))) {
 			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
 		} catch (IOException e) {
-			System.err.format("Unable to write language configuration to %s\\%s.properties%n", PROJECT_HOME, langName);
+			LOGGER.error("Unable to write language configuration to {}\\{}.properties",
+			             PROJECT_HOME, langName);
 		}
 	}
 
@@ -137,16 +138,15 @@ public class Language implements Serializable, Comparable {
 			partsOS.put(PartOfSpeech.UNDEFINED, new PartOfSpeech(this, PartOfSpeech.UNDEFINED));
 			partsOS.put(PartOfSpeech.COMPOSITE, new PartOfSpeech(this, PartOfSpeech.COMPOSITE));
 		} catch (IOException e) {
-			System.err.format("Unable to read language configuration. %s.properties file is corrupt or missing at" +
-					                  " %s. %n", langName, projectHome);
+			LOGGER.error("Unable to read language configuration. {}.properties file is corrupt or missing at {}",
+			             langName, projectHome);
 		}
-		LOGGER.debug("partOfSpeech.size()={}:\n{}", partsOS.size(), partsOS.keySet().toString().replaceAll(",", ",\n"));
+		LOGGER.debug("partOfSpeech.size()={}", partsOS.size());
 		return partsOS;
 	}
 
 	private void savePartsOfSpeech() {
-		LOGGER.debug("saving partOfSpeech: size={}:\n{}",
-		             partsOfSpeech.size(), partsOfSpeech.keySet().toString().replaceAll(",", ",\n"));
+		LOGGER.debug("saving partOfSpeech: size={}", partsOfSpeech.size());
 		Properties langProps = new Properties();
 		final int[] i = { 1 };
 		synchronized (partsOfSpeech) {
@@ -157,7 +157,7 @@ public class Language implements Serializable, Comparable {
 		try (OutputStream out = new FileOutputStream(new File(projectHome, String.format("%s.properties", langName)))) {
 			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
 		} catch (IOException e) {
-			System.err.format("Unable to write language configuration to %s\\%s.properties%n", projectHome, langName);
+			LOGGER.error("Unable to write language configuration to {}\\{}.properties", projectHome, langName);
 		}
 	}
 

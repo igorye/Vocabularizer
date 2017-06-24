@@ -1,13 +1,13 @@
-package com.nicedev.gtts.sound;
+package com.nicedev.gtts.service;
 
-public class PronunciationData {
+public class TTSData {
 	public final String pronunciationSource;
 	public final int delayAfter;
 	public final String accent;
 	public final float limitPercent;
 	public final String outFileName;
 	
-	public PronunciationData(String pronunciationSource, String accent, String outFileName, int delayAfter, float limitPercent) {
+	public TTSData(String pronunciationSource, String accent, String outFileName, int delayAfter, float limitPercent) {
 		this.pronunciationSource = pronunciationSource;
 		this.delayAfter = delayAfter;
 		this.accent = accent;
@@ -15,7 +15,7 @@ public class PronunciationData {
 		this.outFileName = outFileName;
 	}
 	
-	public PronunciationData(String pronunciationSource, String accent, int delayAfter, float limitPercent) {
+	public TTSData(String pronunciationSource, String accent, int delayAfter, float limitPercent) {
 		this.pronunciationSource = pronunciationSource;
 		this.delayAfter = delayAfter;
 		this.accent = accent;
