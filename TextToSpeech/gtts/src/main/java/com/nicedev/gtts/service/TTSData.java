@@ -24,7 +24,7 @@ public class TTSData {
 	}
 	
 	public String toString() {
-		return String.format("%s", pronunciationSource);
+		return pronunciationSource;
 	}
 
 }

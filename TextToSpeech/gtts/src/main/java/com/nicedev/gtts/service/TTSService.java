@@ -17,6 +17,7 @@ public abstract class TTSService extends Thread {
 
 	static final int DEFAULT_CACHE_SIZE = 5;
 	final static private String[] accents = { "GB", "US" };
+	private static final int LENGTH_THRESHOLD = 167; // below that length of text resulting audio ends with relatively long silence
 	final boolean showProgress;
 	private final CachingAgent cachingAgent;
 	volatile boolean isStopping = false;
@@ -31,6 +32,7 @@ public abstract class TTSService extends Thread {
 	private int accent = 0;
 	private boolean awaitInput = true;
 	private final ExecutorService executor;
+	private Map<Character, Integer> delays;
 
 
 	TTSService(int cacheSize, boolean showProgress) {
@@ -42,10 +44,39 @@ public abstract class TTSService extends Thread {
 		outputQueue = new ArrayBlockingQueue<>(CACHE_SIZE);
 		executor = Executors.newFixedThreadPool(CACHE_SIZE);
 		cachingAgent = new CachingAgent();
+		delays = new HashMap<>();
 	}
 
 	public TTSService(int cacheSize) {
 		this(cacheSize, false);
+	}
+
+	public void enqueueAsync(String wordsToPronounce) {
+		enqueueAsync(wordsToPronounce, 0);
+	}
+
+	public void enqueueAsync(String wordsToPronounce, int delay) {
+		appender.enqueue(wordsToPronounce, delay);
+	}
+
+	public void enqueue(String wordsToPronounce) {
+		enqueue(wordsToPronounce, 0);
+	}
+
+	public void enqueue(String text, int delay) {
+		if (text.trim().isEmpty()) return;
+		try {
+			validateCache();
+			String accent = text.contains("://") ? null : getActualAccent();
+			for (String words : split(text, "\n", 0)) {
+				if (isInterrupted()) break;
+				int limitPercent = words.length() <= LENGTH_THRESHOLD ? 98 : 95;
+				LOGGER.debug("Enqueuing: {}", words);
+				inputQueue.put(new TTSData(words, accent, getDelay(words, delay), limitPercent));
+			}
+		} catch (InterruptedException e) {
+			LOGGER.debug("Interrupted while adding to the queue. inputQueue.size={}", inputQueue.size());
+		}
 	}
 
 	private static Collection<String> split(String line, String splitter, int nextRule) {
@@ -82,6 +113,20 @@ public abstract class TTSService extends Thread {
 		return res;
 	}
 
+	public TTSService setDelays(Map<Character, Integer> delays) {
+		this.delays = delays;
+		return this;
+	}
+
+	public TTSService setDelay(Character ending, Integer delay) {
+		delays.put(ending, delay >= 0 ? delay : 200);
+		return this;
+	}
+
+	private int getDelay(String text, int defaultDelay) {
+		return delays.getOrDefault(text.charAt(text.length()-1), defaultDelay);
+	}
+
 	private class AsyncAppender {
 
 		private Thread instance;
@@ -89,7 +134,6 @@ public abstract class TTSService extends Thread {
 		AsyncAppender() {
 			instance = new Thread();
 		}
-
 		void enqueue(String wordsToPronounce, int delay) {
 			instance = new Thread(() -> TTSService.this.enqueue(wordsToPronounce, delay));
 			instance.setDaemon(true);
@@ -100,35 +144,7 @@ public abstract class TTSService extends Thread {
 			instance.interrupt();
 			LOGGER.debug("Appender cleared");
 		}
-	}
 
-	public void enqueue(String text, int delay) {
-		if (text.trim().isEmpty()) return;
-		try {
-			validateCache();
-			String accent = text.contains("://") ? null : getActualAccent();
-			for (String words : split(text, "\n", 0)) {
-				if (isInterrupted()) break;
-				inputQueue.put(new TTSData(words, accent, delay, 98));
-			}
-		} catch (InterruptedException e) {
-			/*NOP*/
-			LOGGER.debug("Interrupted while adding to the queue. inputQueue.size={}", inputQueue.size());
-		}
-	}
-
-	abstract protected void validateCache();
-
-	void enqueue(String wordsToPronounce) {
-		enqueue(wordsToPronounce, 0);
-	}
-
-	public void enqueueAsync(String wordsToPronounce) {
-		enqueueAsync(wordsToPronounce, 0);
-	}
-
-	public void enqueueAsync(String wordsToPronounce, int delay) {
-		appender.enqueue(wordsToPronounce, delay);
 	}
 
 	public void switchAccent() {
@@ -156,12 +172,14 @@ public abstract class TTSService extends Thread {
 	}
 
 	public void clearQueue() {
-		invalidateCache();
 		appender.clearQueue();
+		invalidateCache();
 		inputQueue.clear();
 		outputQueue.clear();
 		cache.clear();
 	}
+
+	abstract protected void validateCache();
 
 	abstract protected void invalidateCache();
 
@@ -186,9 +204,12 @@ public abstract class TTSService extends Thread {
 			while (!isStopping) {
 				TTSData ttsData = null;
 				try {
-					LOGGER.debug("taking ttsData");
+					if (inputQueue.isEmpty())
+						LOGGER.debug("awaiting ttsData");
 					ttsData = inputQueue.take();
-					LOGGER.debug("caching \"{}\"", ttsData);
+					String data = ttsData.toString();
+					LOGGER.debug("caching: {}[{}]",
+					             data.length() > 15 ? data.substring(0,  15) : data, data.length());
 					if (overloadAccent) ttsData = new TTSData(ttsData.pronunciationSource,
 					                                          getActualAccent(),
 					                                          ttsData.delayAfter,

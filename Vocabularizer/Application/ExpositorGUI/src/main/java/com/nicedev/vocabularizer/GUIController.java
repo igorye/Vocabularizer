@@ -1221,6 +1221,7 @@ public class GUIController implements Initializable {
 	private void pronounce(Optional<String> selection) {
 		pronouncingService.clearQueue();
 		Platform.runLater(() -> {
+			pronouncingService.clearQueue();
 			pronouncingService.enqueueAsync(selection.orElse(selectedHWItems.stream().collect(joining("\n"))),
 			                                PRONUNCIATION_DELAY);
 		});
@@ -1230,6 +1231,7 @@ public class GUIController implements Initializable {
 		if (!autoPronounce) return;
 		pronouncingService.clearQueue();
 		Platform.runLater(() -> {
+			pronouncingService.clearQueue();
 			Iterator<String> sIt = vocabula.getPronunciationSources().iterator();
 			if (sIt.hasNext()) pronouncingService.enqueue(sIt.next(), PRONUNCIATION_DELAY);
 			else pronouncingService.enqueue(vocabula.headWord, PRONUNCIATION_DELAY);

@@ -39,15 +39,13 @@ abstract public class GoogleRequestProxy {
 			return thread;
 		});
 		possibleSuffixes = Collections.synchronizedList(new ArrayList<>());
-		executor.execute(new SuffixEnumerator());
-		while (!proceedSuffixes) Thread.yield();
 		relevantSuffixes = new LinkedBlockingDeque<>();
+		executor.execute(new SuffixEnumerator());
 		enumHosts();
 		next = new Random(System.currentTimeMillis()).nextInt(50);
 	}
 	
 	public void release() {
-		interrupted = true;
 		executor.shutdownNow();
 		LOGGER.info("Terminating proxy. Switches - {}, rejects - {}, enumerations - {}",
 		            switches, rejects, enums);
@@ -80,30 +78,41 @@ abstract public class GoogleRequestProxy {
 	}
 	
 	private void warnReject(InterruptedException e) {
-		LOGGER.warn("Interrupted while rejecting host: {}", e.getMessage());
+		LOGGER.warn("Interrupted while rejecting host: {} {}", e, e.getMessage());
 	}
 	
 	private void infoReject(Exception e) {
-		LOGGER.info("Rejecting host ({} left): {}. {}n",
-								relevantSuffixes.size(), e.getMessage(), e.getCause().getMessage());
+		LOGGER.info("Rejecting host ({} left): {} {}",
+								relevantSuffixes.size(), e, e.getMessage());
 	}
 	
 	String nextHost() {
-		//while (relevantSuffixes.isEmpty()) Thread.yield();
+		while (relevantSuffixes.size() < next) Thread.yield();
+		if (next > 0) shiftStart(next);
 		String suffix = "com";
 		try {
 			suffix = relevantSuffixes.take();
 			relevantSuffixes.put(suffix);
 			switches++;
 		} catch (InterruptedException e) {
-			LOGGER.info("Interrupted while switching to next host: {}", e);
+			LOGGER.info("Interrupted while switching to next host: {}, switches = {}", e, switches);
 			return nextHost();
 		}
 		String nextHost = String.format(HOST_NAME_FMT, suffix);
-		LOGGER.info("redirecting to {}", nextHost);
+		LOGGER.info("redirecting to {} (among {})", nextHost, relevantSuffixes.size());
 		return nextHost;
 	}
-	
+
+	private void shiftStart(int next) {
+		for (int i = 0; i < next; i++)
+			try {
+				relevantSuffixes.put(relevantSuffixes.take());
+			} catch (InterruptedException e) {
+				LOGGER.debug("interrupted while shifting to starting host");
+			}
+		next = 0;
+	}
+
 	HttpURLConnection getRequestConnection(String request) throws IOException {
 		URL url = new URL(request);
 		return request.startsWith("https") ? (HttpsURLConnection) url.openConnection()
@@ -124,7 +133,7 @@ abstract public class GoogleRequestProxy {
 	}
 	
 	class AddrTester implements Runnable {
-		
+
 		private String domainSuffix;
 		private final CountDownLatch cdLatch;
 
@@ -186,8 +195,8 @@ abstract public class GoogleRequestProxy {
 	}
 	
 	class HostEnumerator implements Runnable {
-
 		public void run() {
+			while (!proceedSuffixes) Thread.yield();
 			LOGGER.info("Enumerating hosts...");
 			CountDownLatch cdLatch = new CountDownLatch(possibleSuffixes.size());
 			possibleSuffixes.forEach(suffix -> executor.execute(new AddrTester(suffix, cdLatch)));

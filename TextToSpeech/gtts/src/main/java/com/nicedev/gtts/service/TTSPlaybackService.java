@@ -35,9 +35,12 @@ public class TTSPlaybackService extends TTSService {
 	public void run() {
 		while (!isStopping && hasPendingData() && !isInterrupted()) {
 			try {
-				LOGGER.info("Taking ttsData");
+				if (outputQueue.isEmpty())
+					LOGGER.info("awaiting ttsData");
 				TTSData ttsData = outputQueue.take();
-				LOGGER.info("About to play \"{}\"", ttsData);
+				String data = ttsData.toString();
+				LOGGER.info("About to play: {}[{}]",
+				            data.length() > 15 ? data.substring(0, 15) : data, data.length());
 				if (invalidateCache) {
 					Thread.yield();
 				} else {

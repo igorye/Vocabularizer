@@ -26,15 +26,18 @@ public class TTSRequestProxy extends GoogleRequestProxy {
 	}
 	
 	//request mp3 stream
-	public InputStream requestTTSStream(TTSData pronunciationData) {
-		String request = pronunciationData.pronunciationSource;
+	public InputStream requestTTSStream(TTSData ttsData) {
+		String data = ttsData.toString();
+		LOGGER.debug("TTS request: {}[{}]",
+		             data.length() > 15 ? data.substring(0, 15) : data, data.length());
+		String request = ttsData.pronunciationSource;
 		boolean isTTSConnection = false;
 		try {
 			if (!request.contains("://"))
 				request = String.format(TTS_REQUEST_FMT.format, nextHost(), URLEncoder.encode(request, "UTF-8"),
-				                        pronunciationData.accent, request.length(), request.length());
+				                        ttsData.accent, request.length(), request.length());
 		} catch (UnsupportedEncodingException e) {
-			return requestTTSStream(pronunciationData);
+			return requestTTSStream(ttsData);
 		}
 		HttpURLConnection conn = null;
 		try {
@@ -55,7 +58,7 @@ public class TTSRequestProxy extends GoogleRequestProxy {
 				return null;
 			}
 			if (isTTSConnection) rejectRecentHost(e);
-			return requestTTSStream(pronunciationData);
+			return requestTTSStream(ttsData);
 		}
 	}
 }
