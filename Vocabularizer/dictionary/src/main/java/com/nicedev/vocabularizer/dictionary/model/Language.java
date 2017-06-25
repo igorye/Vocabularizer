@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.lang.invoke.MethodHandles;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
@@ -141,12 +144,12 @@ public class Language implements Serializable, Comparable {
 			LOGGER.error("Unable to read language configuration. {}.properties file is corrupt or missing at {}",
 			             langName, projectHome);
 		}
-		LOGGER.debug("partOfSpeech.size()={}", partsOS.size());
+		LOGGER.debug("Loaded partsOfSpeech[{}]", partsOS.size());
 		return partsOS;
 	}
 
 	private void savePartsOfSpeech() {
-		LOGGER.debug("saving partOfSpeech: size={}", partsOfSpeech.size());
+		LOGGER.debug("Saving partsOfSpeech[{}]", partsOfSpeech.size());
 		Properties langProps = new Properties();
 		final int[] i = { 1 };
 		synchronized (partsOfSpeech) {
@@ -154,6 +157,13 @@ public class Language implements Serializable, Comparable {
 		}
 		String userHome = System.getProperties().getProperty("user.home");
 		String projectHome = System.getProperties().getProperty("Vocabularizer.home", userHome + "\\vocabularizer");
+		Path dir = Paths.get(projectHome).toAbsolutePath().getParent();
+		if (!Files.exists(dir))
+			try {
+				Files.createDirectories(dir);
+			} catch (IOException e) {
+				projectHome = userHome;
+			}
 		try (OutputStream out = new FileOutputStream(new File(projectHome, String.format("%s.properties", langName)))) {
 			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
 		} catch (IOException e) {
@@ -195,8 +205,8 @@ public class Language implements Serializable, Comparable {
 		int partsCount = partsOfSpeech.size();
 		PartOfSpeech partOfSpeech;
 		synchronized (partsOfSpeech) {
-			partOfSpeech = partsOfSpeech.computeIfAbsent(partOfSpeechName, s ->
-					                                                               new PartOfSpeech(this, partOfSpeechName));
+			partOfSpeech = partsOfSpeech.computeIfAbsent(partOfSpeechName,
+			                                             s -> new PartOfSpeech(this, partOfSpeechName));
 		}
 		/*PartOfSpeech partOfSpeech =
 				partsOfSpeech.getOrDefault(partOfSpeechName,

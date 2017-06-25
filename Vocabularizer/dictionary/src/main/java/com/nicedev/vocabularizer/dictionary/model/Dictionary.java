@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.lang.invoke.MethodHandles;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.zip.GZIPInputStream;
@@ -57,15 +60,30 @@ public class Dictionary implements Serializable {
 	}
 
 	public static boolean save(Dictionary dict, String path) {
+		Path filePath;
+		if (!Files.exists(filePath = Paths.get(path))) {
+			try {
+				Path dir = filePath.toAbsolutePath().getParent();
+				if (!Files.exists(dir)) Files.createDirectories(dir);
+			} catch (IOException e) {
+				logError(e);
+				path = System.getProperty("user.home").concat("\\").concat(Paths.get(path).getFileName().toString());
+				LOGGER.info("Saving to {}", path);
+			}
+		}
 		try (ObjectOutput out = new ObjectOutputStream(new GZIPOutputStream(new FileOutputStream(path), 1024 * 1024))) {
 			out.writeObject(dict);
 			return true;
 		} catch (IOException e) {
-			LOGGER.error("Error has occured while saving com.nicedev.com.nicedev.dictionary.model: {}", e.getMessage());
+			logError(e);
 		}
 		return false;
 	}
-	
+
+	private static void logError(IOException e) {
+		LOGGER.error("Error has occurred while saving dictionary: {} {}", e, e.getMessage());
+	}
+
 	/*public boolean addDefinitions(String newEntry, String partOfSpeechName, Set<Definition> definitions) {
 		if (!Language.charsMatchLanguage(newEntry, language)) return false;
 		Vocabula voc = articles.getOrDefault(newEntry, new Vocabula(newEntry, language));

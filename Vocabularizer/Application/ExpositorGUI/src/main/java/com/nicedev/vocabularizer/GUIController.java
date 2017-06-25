@@ -345,11 +345,9 @@ public class GUIController implements Initializable {
 	};
 
 	private final ChangeListener<Tab> tabSelectionListener = (observable, oldValue, newValue) -> {
-//		synchronized (tabPane) {
 		filterOn = tabPane.getSelectedTabIndex() == 0;
 		String caption = filterOn ? newValue.getText() : newValue.getTooltip().getText();
 		updateQueryBoxText(caption, false);
-//		}
 		Platform.runLater(() -> {
 			if (!filterOn || relevantSelectionOwner != queryBox) {
 				tabPane.getActiveTab().getContent().requestFocus();
@@ -824,11 +822,9 @@ public class GUIController implements Initializable {
 			}
 			int textLength = queryBoxValue.getValue().length();
 			int newCaretPos = caretPos == textLength ? text.length() : caretPos == 0 ? caretPos + 1 : caretPos;
-//			synchronized (queryBox) {
 			queryBox.editorProperty().getValue().setText(text);
 			queryBox.editorProperty().get().positionCaret(newCaretPos);
 			caretPos = queryBox.editorProperty().get().getCaretPosition();
-//			}
 			filterOn = filterState;
 		};
 		if (Platform.isFxApplicationThread()) {
@@ -1103,14 +1099,14 @@ public class GUIController implements Initializable {
 	private void saveRecentQueries() {
 		try (BufferedWriter bw = Files.newBufferedWriter(Paths.get(PROJECT_HOME, HISTORY_FILENAME), CREATE,
 		                                                 TRUNCATE_EXISTING)) {
-//			synchronized (queryBox) {
 			String history = queryBox.getItems().stream()
 					                 .distinct()
 					                 .filter(Strings::notBlank)
 					                 .collect(joining("\n"));
 			bw.write(history);
-//			}
-		} catch (IOException e) { /* NOP */ }
+		} catch (IOException e) {
+			LOGGER.error("Unable to save to {}\\{}: {}", PROJECT_HOME, HISTORY_FILENAME, e);
+		}
 	}
 
 	private void loadRecentQueries() {
