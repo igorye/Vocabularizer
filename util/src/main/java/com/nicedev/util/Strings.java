@@ -37,14 +37,11 @@ public class Strings {
 		}
 		return true;
 	}
-	
-	public static String getValidPatternOrFailAnyMatch(String regex, String... matchFlags) {
-		String matchFlagsRegex = String.format("(?%s)", Stream.of(matchFlags).collect(joining("")));
-		if (!isAValidPattern(matchFlagsRegex)) return ALWAYS_FAIL_MATCH_PATTERN;
-		if ( isAValidPattern(regex) ) return matchFlagsRegex.concat(regex);
+
+	public static String getValidPatternOrFailAnyMatch(String regex) {
+		if (isAValidPattern(regex)) return regex;
 		// try to "fix" regex escaping certain service symbols
-		String escapedRegex = escapeSymbols(regex, "[\\[\\]()^{}&*.+-]");
-		String result = matchFlagsRegex.concat(escapedRegex);
+		String result = escapeSymbols(regex, "[\\[\\]()^{}&*.+-]");
 		// mock regex with always-fail-match-pattern if we can't "fix" available one
 		if (!isAValidPattern(result)) result = ALWAYS_FAIL_MATCH_PATTERN;
 		return result;

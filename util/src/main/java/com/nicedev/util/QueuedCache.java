@@ -1,19 +1,15 @@
 package com.nicedev.util;
 
 import java.util.*;
+import java.util.Collections;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
-import static java.lang.Math.min;
-
-public class QueuedCache<K extends Comparable<K>, V> {
+public class QueuedCache<K, V> implements Map<K, V>{
 
 	private K persistentKey = null;
 	private Map<K, V> cacheMap;
 	private Queue<K> cacheQueue;
-//	private Map<V, K> equalsCache;
 	private int capacity;
-//	IdenticalCacheOptimizer<K, V> optimizer = null;
 
 	public QueuedCache() {
 		this(Integer.MAX_VALUE);
@@ -22,28 +18,14 @@ public class QueuedCache<K extends Comparable<K>, V> {
 	public QueuedCache(int capacity) {
 		cacheQueue = new LinkedList<>();
 		cacheMap = new LinkedHashMap<>();
-//		equalsCache = new LinkedHashMap<>();
 		this.capacity = capacity;
 	}
-
-	/*public QueuedCache(int capacity, IdenticalCacheOptimizer<K, V> optimizer) {
-		this(capacity);
-		this.optimizer = optimizer;
-	}
-
-	public void setOptimizer(IdenticalCacheOptimizer<K, V> optimizer) {
-		this.optimizer = optimizer;
-	}*/
 
 	public QueuedCache(K persistentKey, int capacity) {
 		this(capacity);
 		this.persistentKey = persistentKey;
 	}
 
-	public V get(K key) {
-		return cacheMap.get(key);
-	}
-	
 	public V computeIfAbsent(K key, Function<? super K, ? extends V> mapper) {
 		int size = cacheMap.size();
 		V value = cacheMap.computeIfAbsent(key, mapper);
@@ -54,51 +36,75 @@ public class QueuedCache<K extends Comparable<K>, V> {
 		}
 		return value;
 	}
-	
-	private void showContents() {
-		String keys = cacheQueue.stream().map(k -> "\"" + k.toString() + "\"").collect(Collectors.joining(", "));
-//		SimpleLog.log("\tcache: keys in cache: %s", keys);
-//		cacheQueue.forEach(k -> SimpleLog.log("\tkey \"%s\" | val %s", k, getValue(k)));
-	}
-	
-	private String getValue(K k) {
-		String str = cacheMap.get(k).toString();
-		return str.substring(0, min(str.length(),30));
-	}
-	
-	private String valueToString(V v) {
-		String str = v.toString();
-		return str.substring(0, min(str.length(), 30));
-	}
-	
+
 	public V put(K key, V value) {
 		cacheQueue.offer(key);
 		value = cacheMap.put(key, value);
-		if (cacheQueue.size() >= capacity && cacheMap.size() >= capacity) {
+		if ((cacheQueue.size() >= capacity) && (cacheMap.size() >= capacity)) {
 			K oldest = cacheQueue.poll();
 			if (oldest != persistentKey && oldest != key) cacheMap.remove(oldest);
 		}
 		return value;
 	}
 
+	@Override
+	public V remove(Object key) {
+		cacheQueue.remove(key);
+		return cacheMap.remove(key);
+	}
+
+	@Override
+	public void putAll(Map<? extends K, ? extends V> m) {
+		m.forEach((k, v) -> put(k, v));
+	}
+
 	public void clear() {
 		cacheMap.clear();
 		cacheQueue.clear();
 	}
-	
-	public void remove(K key) {
-		cacheMap.remove(key);
+
+	@Override
+	public Set<K> keySet() {
+		return Collections.unmodifiableSet(cacheMap.keySet());
 	}
-	
-	public void remove(Collection<K> keys) {
-		keys.forEach(this::remove);
+
+	@Override
+	public Collection<V> values() {
+		return Collections.unmodifiableCollection(cacheMap.values());
 	}
-	
+
+	@Override
+	public Set<Entry<K, V>> entrySet() {
+		return Collections.unmodifiableSet(cacheMap.entrySet());
+	}
+
 	public void putPersistent(V val) {
 		cacheMap.put(persistentKey, val);
 	}
-	
+
+	@Override
 	public int size() {
-		return cacheMap.keySet().size();
+		return cacheMap.size();
 	}
+
+	@Override
+	public boolean isEmpty() {
+		return cacheMap.isEmpty();
+	}
+
+	@Override
+	public boolean containsKey(Object key) {
+		return cacheMap.containsKey(key);
+	}
+
+	@Override
+	public boolean containsValue(Object value) {
+		return cacheMap.containsValue(value);
+	}
+
+	@Override
+	public V get(Object key) {
+		return cacheMap.get(key);
+	}
+
 }
