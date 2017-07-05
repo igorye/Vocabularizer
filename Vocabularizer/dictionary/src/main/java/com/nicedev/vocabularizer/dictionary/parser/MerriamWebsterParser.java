@@ -284,8 +284,7 @@ public class MerriamWebsterParser {
 				if (!hasDefinition(sr1.foundAt) && hasDefinition(sr2.foundAt)) return 1;
 				return sr1.compareTo(sr2);
 			};
-			Optional<SearchResult> entrySR = similarsSR.stream()
-					                                 .sorted(hasDefinitionFirst).findFirst();
+			Optional<SearchResult> entrySR = similarsSR.stream().sorted(hasDefinitionFirst).findFirst();
 			entrySR.ifPresent(entriesSR::add);
 		}
 		return entriesSR;
@@ -452,11 +451,11 @@ public class MerriamWebsterParser {
 						}
 					}
 					// look for a reference at definition section
-					if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluateNode("dx", defNodes.item(i)));
+					if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluateDxNode(defNodes.item(i)));
 				}
 		}
 		// look for a reference at entry section
-		if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluateNode("dx", headWordSR.foundAt));
+		if (definitionsSR.isEmpty()) definitionsSR.addAll(evaluateDxNode(headWordSR.foundAt));
 		// compose definition as a reference to parent node's headword
 		if (definitionsSR.isEmpty()) {
 			Optional<SearchResult> parentNodeEntryOSR = getParentNodeEntry(headWordSR.foundAt);
@@ -480,10 +479,10 @@ public class MerriamWebsterParser {
 	}
 
 	// evaluate particular sub-node of the given node
-	private List<SearchResult> evaluateNode(String nodeToEval, Node root)
+	private List<SearchResult> evaluateDxNode(Node root)
 			throws XPathExpressionException {
 		List<SearchResult> result = new ArrayList<>();
-		Optional<Node> evalNode = Optional.ofNullable((Node) xPath.evaluate(nodeToEval, root, NODE));
+		Optional<Node> evalNode = Optional.ofNullable((Node) xPath.evaluate("dx", root, NODE));
 		evalNode.ifPresent(node -> result.add(new SearchResult(extractNodeContents(node), node)));
 		return result;
 	}
@@ -578,7 +577,7 @@ public class MerriamWebsterParser {
 					content.append(child.getTextContent());
 			}
 		}
-		return content.toString().replace(DASH, HYPHEN).replace(ASTERISK, "").replaceAll("\n|\r", "");
+		return content.toString().replace(DASH, HYPHEN).replace(ASTERISK, "").replaceAll("[\n\r]", "");
 	}
 
 	private Optional<SearchResult> getParentNodeEntry(Node rootNode) throws XPathExpressionException {

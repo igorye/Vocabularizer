@@ -98,12 +98,12 @@ public class Vocabula implements Serializable, Comparable {
 		addDefinitions(partOfSpeech, definitions);
 	}*/
 
-	public void addDefinitions(PartOfSpeech partOfSpeech, Set<Definition> newDefinitions) {
+	public void addDefinitions(PartOfSpeech partOfSpeech, Collection<Definition> newDefinitions) {
 		Set<Definition> definitions = mapPOS.computeIfAbsent(partOfSpeech, PoS -> new LinkedHashSet<>());
 		newDefinitions.forEach(definition -> definitions.add(new Definition(definition, this, partOfSpeech)));
 	}
 
-	public void removeDefinitions(String partName, Set<String> explanations) {
+	public void removeDefinitions(String partName, Collection<String> explanations) {
 		PartOfSpeech partOfSpeech = language.getPartOfSpeech(partName);
 		mapPOS.get(partOfSpeech).removeIf(def -> explanations.contains(def.explanation));
 	}

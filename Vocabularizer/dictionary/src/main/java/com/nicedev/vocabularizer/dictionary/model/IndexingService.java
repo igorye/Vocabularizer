@@ -38,18 +38,18 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 	private final int INDEXING_ALGORITHM;
 	private long start;
 	private Map<String, Collection<String>> index;
-	private QueuedCache<String, Collection<String>> referenceCache;
+	private Map<String, Collection<String>> referenceCache;
 
 	public IndexingService(Dictionary dictionaryToIndex, EventHandler<WorkerStateEvent> succeededHandler,
 	                       boolean allowParallel, int indexingAlgorithm,
-	                       QueuedCache<String, Collection<String>> referenceCache) {
+	                       Map<String, Collection<String>> referenceCache) {
 		super();
 		this.source = dictionaryToIndex;
 		this.succeededHandler = succeededHandler;
 		ALLOW_PARALLEL = allowParallel;
 		INDEXING_ALGORITHM = indexingAlgorithm;
-		index = source.filterHeadwords("", "i").stream()
-				        .collect(TreeMap::new, (map, s) -> map.put(s, singleton(s)), Map::putAll);
+		index = source.filterHeadwords("", false).stream()
+				        .collect(HashMap::new, (map, s) -> map.put(s, singleton(s)), Map::putAll);
 		this.referenceCache = referenceCache;
 	}
 
@@ -187,9 +187,8 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 
 	private Map<String, Collection<String>> indexFor(Collection<Definition> definitions,
 	                                                 Collection<Function<Definition, Stream<String>>> hwSuppliers) {
-		BiConsumer<Map<String, Collection<String>>, Map<String, Collection<String>>> combiner = (m1, m2) -> {
-			Maps.mergeLeft(m1, m2, ALLOW_PARALLEL);
-		};
+		BiConsumer<Map<String, Collection<String>>, Map<String, Collection<String>>> combiner =
+				(m1, m2) -> Maps.mergeLeft(m1, m2, ALLOW_PARALLEL);
 		BiConsumer<Map<String, Collection<String>>, Definition> accumulator = (resultMap, definition) -> {
 			String definedAt = definition.getDefinedVocabula().headWord;
 			Function<String, Collection<String>> keyMapper = key -> new HashSet<>();
@@ -265,13 +264,13 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 		Platform.runLater(alteringTask);
 	}
 
-	public Collection<String> findReferences(String pattern) {
+	private Collection<String> findReferences(String pattern) {
 		return findReferences(pattern, false);
 	}
 
-	public Collection<String> findReferences(String pattern, boolean isRegex) {
+	private Collection<String> findReferences(String pattern, boolean isRegex) {
 		Function<String, Collection<String>> referencesFinder = pat -> getReferencesFinder().apply(pat, isRegex);
-		return isRegex || Objects.isNull(referenceCache)
+		return isRegex || referenceCache == null
 				       ? getReferencesFinder().apply(pattern, isRegex)
 				       : referenceCache.computeIfAbsent(pattern, referencesFinder);
 	}
@@ -279,19 +278,19 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 	public BiFunction<String, Boolean, Collection<String>> getReferencesFinder() {
 		return (pattern, isRegex) -> {
 			String patternLC = pattern.toLowerCase();
-			String validPattern = getValidPatternOrFailAnyMatch(composeRE(pattern, isRegex), "i");
-			Predicate<String> regExMatchPredicate = s -> !isRegex || s.matches(validPattern);
+			String validPattern = getValidPatternOrFailAnyMatch("(?i)".concat(composeRE(pattern, isRegex)));
+			Predicate<String> regexMatchPredicate = s -> !isRegex || s.matches(validPattern);
 			return pattern.isEmpty()
 					       ? Streams.getStream(getIndex().keySet(), ALLOW_PARALLEL)
-							         .filter(s -> source.getVocabula(s).map(vocabula -> vocabula.hasDecentDefinition()).orElse(true))
+							         .filter(s -> source.getVocabula(s).map(Vocabula::hasDecentDefinition).orElse(true))
 							         .sorted(Comparator.naturalOrder())
 							         .collect(toList())
-								 : Streams.getStream(getIndex().keySet(), ALLOW_PARALLEL)
+					       : Streams.getStream(getIndex().keySet(), ALLOW_PARALLEL)
 							         .filter(hw -> hw.toLowerCase().contains(patternLC) || hw.matches(validPattern))
 							         .flatMap(hw -> hw.matches(validPattern)
 									                        ? getIndex().get(hw).stream()
 									                        : Stream.of(hw))
-							         .filter(regExMatchPredicate)
+							         .filter(regexMatchPredicate)
 							         .distinct()
 							         .sorted(partialMatchComparator(pattern, true))
 							         .collect(toList());
@@ -306,10 +305,9 @@ public class IndexingService extends Service<Map<String, Collection<String>>> {
 		if (getState() != State.SUCCEEDED) return Optional.empty();
 		return findReferences(headWord).stream()
 				       .filter(hw -> !hw.equalsIgnoreCase(headWord))
+				       .filter(hw -> findReferences(hw.toLowerCase()).contains(headWord))////todo: try matching employing replacing def1/def2 -> def1|def2 or suchlike
 				       .sorted(Comparators.firstComparing((String s) -> s.charAt(0) == headWord.charAt(0))
 						               .thenComparing(Comparator.naturalOrder()))
-				       .filter(hw -> findReferences(hw.toLowerCase()).contains(
-						       headWord))////todo: try matching employing replacing def1/def2 -> def1|def2 or suchlike
 				       .findFirst()
 				       .flatMap(hw -> source.findVocabula(hw));
 	}

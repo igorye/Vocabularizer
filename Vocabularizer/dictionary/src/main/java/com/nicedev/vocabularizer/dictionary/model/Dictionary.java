@@ -4,6 +4,7 @@ package com.nicedev.vocabularizer.dictionary.model;
 import com.nicedev.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.profiler.Profiler;
 
 import java.io.*;
 import java.lang.invoke.MethodHandles;
@@ -11,19 +12,23 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.function.Predicate;
+import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.toList;
-import static java.util.stream.Collectors.toSet;
 
 public class Dictionary implements Serializable {
 
 	private static final long serialVersionUID = -1507438212189317827L;
 
-	static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
+	private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
+	private static final Profiler profiler = new Profiler("Dictionary");
+	private static final String CACHE_INVALID = "[I_N_V_A_L_I_D]";
+
+	static {
+		profiler.setLogger(LOGGER);
+	}
 
 	final public Language language;
 	final private Map<String, Vocabula> articles;
@@ -31,14 +36,14 @@ public class Dictionary implements Serializable {
 	private int definitionsCount;
 	private int vocabulasCount;
 	transient private String cachedRequest;
-	transient private Vocabula cachedResponse;
+	transient private Optional<Vocabula> optCachedResponse;
 	transient private boolean invalidateStatistics = true;
 //  private Locale locale;
 
 
 	public Dictionary(String lang) {
 		this.language = new Language(lang);
-		articles = new TreeMap<>();
+		articles = new HashMap<>();
 		index = new TreeMap<>();
 //      locale = new Locale(language.langName.toLowerCase());
 	}
@@ -56,7 +61,7 @@ public class Dictionary implements Serializable {
 		if (dictionary != null && !dictionary.articles.isEmpty()) {
 			dictionary.updateStatistics();
 		}
-		return ofNullable(dictionary);
+		return Optional.ofNullable(dictionary);
 	}
 
 	public static boolean save(Dictionary dict, String path) {
@@ -151,7 +156,10 @@ public class Dictionary implements Serializable {
 		assert articles.get(newVoc.headWord).getDefinitions().stream().allMatch(Objects::nonNull);
 //		updateStatistics();
 		invalidateStatistics = true;
-		return articlesCount != articles.size();
+		boolean added = articlesCount != articles.size();
+		if (added && cachedRequest.equals(newVoc.headWord))
+			cachedRequest = CACHE_INVALID;
+		return added;
 	}
 
 	public int addVocabulas(Collection<Vocabula> newVocabulas) {
@@ -181,7 +189,7 @@ public class Dictionary implements Serializable {
 //		updateStatistics();
 		invalidateStatistics = true;
 		if (succeed) {
-			cachedRequest = "";
+			cachedRequest = CACHE_INVALID;
 		}
 		return succeed;
 	}
@@ -190,27 +198,89 @@ public class Dictionary implements Serializable {
 		return true;
 	}*/
 
-	public String explainVocabula(String filter) {
+	/*public String explainVocabulas(String regex) {
+		profiler.start("explainVocabulas(stringBuilderOverFilter)");
 		StringBuilder res = new StringBuilder();
 		if (getVocabulasCount() != 0) {
-			filter = Strings.isAValidPattern(filter) ? filter.toLowerCase()
-					         : String.join("", "\\", filter.toLowerCase());
+			regex = Strings.isAValidPattern(regex)
+					        ? regex.toLowerCase()
+					        : String.join("", "\\", regex.toLowerCase());
 			articles.values().stream()
-					.filter(getVocabulaPredicate(filter))
+					.sorted()
+					.filter(getVocabulaPredicate(regex))
 					.forEach(voc -> res.append(voc).append("\n"));
 		}
+		profiler.stop().log();
 		return res.toString();
 	}
 
-	private Predicate<Vocabula> getVocabulaPredicate(String filter) {
-		return voc -> filter.isEmpty() || voc.headWord.toLowerCase().matches(filter);
+	private Predicate<Vocabula> getVocabulaPredicate(String regex) {
+		return voc -> regex.isEmpty() || voc.headWord.matches(regex);
+	}*/
+
+	public String explainVocabulas(String regex) {
+		profiler.start("explainVocabulas(stringBuilder)");
+		StringBuilder res = new StringBuilder();
+		if (getVocabulasCount() != 0) {
+			Collection<String> candidates = filterHeadwords(regex, true);
+			if (getVocabula(regex).isPresent()) {
+				res.append(articles.get(regex)).append("\n");
+			} else {
+				candidates.stream()
+						.map(this::getVocabula)
+						.filter(Optional::isPresent)
+						.map(Optional::get)
+						.forEach(voc -> res.append(voc).append("\n"));
+			}
+		}
+		profiler.stop().log();
+		return res.toString();
 	}
+
+	public Collection<String> filterHeadwords(String regex, boolean sorted) {
+		if (articles.isEmpty()) return Collections.emptyList();
+		profiler.start("filterHeadwords");
+		Stream<String> matched;
+		if (regex.isEmpty() || regex.trim().matches("\\(\\?[idmsux-]+\\)")) {
+			matched = articles.keySet().stream();
+		} else {
+			String validatedRegex = Strings.getValidPatternOrFailAnyMatch(regex);
+			matched = articles.keySet().stream()
+					          .filter(hw -> hw.contains(regex) || hw.matches(validatedRegex));
+		}
+		if (sorted) matched = matched.sorted();
+		List<String> filtered = matched.collect(toList());
+		profiler.stop().log();
+		return filtered;
+	}
+
+/*
+	public String explainVocabulas(String regex) {
+		profiler.start("explainVocabulas(collect(joining))");
+		String result = "";
+		if (getVocabulasCount() != 0) {
+			String prefix = Strings.isAValidPattern(regex) ? "(?i)" : "(?i)\\";
+			String actRegex = prefix.concat(regex);
+			result = articles.keySet().stream()
+					         .filter(hw -> actRegex.isEmpty() || hw.matches(actRegex))
+					         .sorted()
+					         .map(this::getVocabula)
+					         .filter(Optional::isPresent)
+					         .map(Optional::get)
+					         .map(Vocabula::toString)
+					         .collect(joining("\n"));
+		}
+		profiler.stop().log();
+		return result;
+	}
+*/
 
 	public Collection<Vocabula> getVocabulas(String filter) {
 		if (filter.isEmpty()) return Collections.unmodifiableCollection(articles.values());
 		if (getVocabulasCount() != 0) {
-			String fFilter = Strings.isAValidPattern(filter) ? filter.toLowerCase() : String.join("", "\\",
-			                                                                                      filter.toLowerCase());
+			String fFilter = Strings.isAValidPattern(filter)
+					                 ? filter.toLowerCase()
+					                 : String.join("", "\\", filter.toLowerCase());
 			return articles.values().stream()
 					       .filter(vocabula -> vocabula.headWord.toLowerCase().matches(fFilter))
 					       .collect(toList());
@@ -218,81 +288,26 @@ public class Dictionary implements Serializable {
 		return Collections.emptyList();
 	}
 
-	public Set<Vocabula> getVocabulas(Collection<String> headwords) {
+	public Collection<Vocabula> getVocabulas(Collection<String> headwords) {
 		if (headwords.isEmpty()) return Collections.emptySet();
+		profiler.start("getVocabulas");
 		if (getVocabulasCount() != 0) {
-			return headwords.stream()
-					       .filter(articles::containsKey)
-					       .map(articles::get)
-					       .collect(toSet());
-		}
-		return Collections.emptySet();
-	}
-
-	public List<Vocabula> filterVocabulas(String filter) {
-		if (getVocabulasCount() != 0) {
-			String fFilter = Strings.isAValidPattern(filter) ? filter.toLowerCase() : String.join("", "\\",
-			                                                                                      filter.toLowerCase());
-			return articles.keySet().stream()
-					       .filter(k -> k.toLowerCase().contains(fFilter) || k.toLowerCase().matches(fFilter))
-					       .map(articles::get)
-					       .collect(toList());
+			List<Vocabula> vocabulas = headwords.stream()
+					                           .map(articles::get)
+					                           .filter(Objects::nonNull)
+					                           .collect(toList());
+			profiler.stop().log();
+			return vocabulas;
 		}
 		return Collections.emptyList();
-	}
-
-	public Set<String> filterHeadwords(String filter, String... matchFlags) {
-		if (filter.isEmpty()) return Collections.unmodifiableSet(articles.keySet());
-		if (getVocabulasCount() != 0) {
-			String fFilter = Strings.getValidPatternOrFailAnyMatch(filter, matchFlags);
-			String filterLC = filter.toLowerCase();
-			return articles.keySet().stream()
-					       .filter(key -> key.isEmpty() || key.toLowerCase().contains(filterLC) || key.matches(fFilter))
-					       .collect(toSet());
-		}
-		return Collections.emptySet();
 	}
 
 	public String toString() {
 		return String.format("Vocabulas: %d | Definitions: %d", getVocabulasCount(), getDefinitionsCount());
 	}
-	
-	/*public int lookupDefinitionEntry(String entry, String partOfSpeechName, String explanation) {
-		Vocabula vocabula = articles.get(entry);
-		if (vocabula == null) return 0;
-		return vocabula.getDefinitions(partOfSpeechName).stream()
-				       .filter(definition -> definition.explanation.equals(explanation))
-				       .mapToInt(definition -> definition.explanation.hashCode()).findFirst().orElse(0);
-	}*/
-	
-	/*public int lookupDefinitionEntry(String explanation) {
-		return index.keySet().contains(explanation.hashCode()) ? explanation.hashCode() : 0;
-	}*/
 
-    /*public String lookupDefinition(String entry) {
-        return lookupDefinition(entry, PartOfSpeech.ANY);
-    }
-
-    public String lookupDefinition(String entry, String partOfSpeechName) {
-        return String.format(" %s%n%s", entry,
-                lookupDefinition(articles.get(entry), language.getPartOfSpeech(partOfSpeechName)));
-    }
-
-    private String lookupDefinition(Vocabula vocabula, PartOfSpeech partOfSpeech) {
-        StringBuilder res = new StringBuilder();
-        if (partOfSpeech.partName.equals(PartOfSpeech.ANY)) {
-            vocabula.mapPOS.keySet().forEach(pos -> res.append(lookupDefinition(vocabula, pos)));
-        } else
-            vocabula.getDefinitions(partOfSpeech).forEach(res::append);
-        return res.toString();
-    }*/
-	
-	/*public Vocabula getVocabulaFromMeaning(int ID) {
-		return index.get(ID);
-	}*/
-
-	public Set<PartOfSpeech> getPartsOfSpeech(String entry) {
-		return ofNullable(articles.get(entry))
+	public Collection<PartOfSpeech> getPartsOfSpeech(String entry) {
+		return Optional.ofNullable(articles.get(entry))
 				       .map(Vocabula::getPartsOfSpeech)
 				       .orElse(Collections.emptySet());
 	}
@@ -303,7 +318,7 @@ public class Dictionary implements Serializable {
 	}
 
 	private void updateStatistics() {
-		// as an agreement tenses of verbs, combining forms of adjectives ets. are not distinct headwords
+		// by agreement tenses of verbs, combining forms of adjectives ets. are not distinct headwords
 		vocabulasCount = (int) articles.values().stream()
 				                       .filter(Vocabula::hasDecentDefinition)
 				                       .count();
@@ -311,7 +326,6 @@ public class Dictionary implements Serializable {
 				                   .filter(Vocabula::hasDecentDefinition)
 				                   .mapToInt(Vocabula::getDecentDefinitionsCount).sum();
 		invalidateStatistics = false;
-//		definitionsCount = articles.values().stream().mapToInt(Vocabula::getDefinitionsCount).sum();
 	}
 
 	public int getDefinitionsCount() {
@@ -319,10 +333,11 @@ public class Dictionary implements Serializable {
 		return definitionsCount;
 	}
 
-	public Set<Definition> getDefinitions(String entry, String partOfSpeechName) {
-		return ofNullable(articles.get(entry))
-				       .map(vocabula -> vocabula.getDefinitions(language.getPartOfSpeech(partOfSpeechName)))
-				       .orElse(Collections.emptySet());
+	public Collection<Definition> getDefinitions(String entry, String partOfSpeechName) {
+		Vocabula vocabula = articles.get(entry);
+		return vocabula == null
+				       ? vocabula.getDefinitions(language.getPartOfSpeech(partOfSpeechName))
+				       : Collections.emptyList();
 	}
 
 	public boolean containsVocabula(String headword) {
@@ -335,22 +350,37 @@ public class Dictionary implements Serializable {
 
 	public Optional<Vocabula> findVocabula(String headword) {
 		if (headword.isEmpty()) return Optional.empty();
-		if (isCached(headword)) return Optional.ofNullable(cachedResponse);
-		List<String> candidates = articles.keySet().stream()
-				                          .filter(s -> s.matches("(?i)" + Strings.escapeSymbols(headword, "[()]")))
-				                          .filter(
-						                          s -> headword.substring(1, headword.length()).equals(s.substring(1, s.length())))
-				                          .sorted()
-				                          .collect(toList());
-		cachedResponse = (candidates.contains(headword))
-				                 ? articles.get(headword)
-				                 : (Character.isUpperCase(headword.charAt(0)) && candidates.size() == 1)
-						                   ? articles.get(candidates.get(0)) : null;
+		if (isCached(headword)) return optCachedResponse;
+		profiler.start("findVocabula");
+		optCachedResponse = Optional.ofNullable(articles.get(headword));
+		if (!optCachedResponse.isPresent()) {
+			String regex = "(?i)".concat(Strings.escapeSymbols(headword, "[()]"));
+			List<String> candidates = articles.keySet().stream()
+					                          .filter(s -> s.matches(regex))
+					                          .filter(s -> headword.substring(1, headword.length()).equals(s.substring(1, s.length())))
+					                          .collect(toList());
+			optCachedResponse = (Character.isUpperCase(headword.charAt(0)) && candidates.size() == 1)
+					                    ? Optional.ofNullable(articles.get(candidates.get(0)))
+					                    : Optional.empty();
+		}
 		cachedRequest = headword;
-		return ofNullable(cachedResponse);
+		profiler.stop().log();
+		return optCachedResponse;
+	}
+
+	public Collection<Vocabula> filterVocabulas(String regex) {
+		profiler.start("filterVocabulas()");
+		if (getVocabulasCount() != 0) {
+			return filterHeadwords(regex, false).stream()
+					       .map(articles::get)
+					       .collect(toList());
+		}
+		profiler.stop().log();
+		return Collections.emptyList();
 	}
 
 	private boolean isCached(String headWord) {
-		return Objects.nonNull(cachedResponse) && Objects.nonNull(cachedRequest) && cachedRequest.equals(headWord);
+		return (optCachedResponse != null) && (cachedRequest != null) && cachedRequest.equals(headWord);
 	}
+
 }
