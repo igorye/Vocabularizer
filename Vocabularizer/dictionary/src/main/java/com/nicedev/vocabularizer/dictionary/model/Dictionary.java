@@ -24,17 +24,17 @@ public class Dictionary implements Serializable {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
 	private static final Profiler profiler = new Profiler("Dictionary");
-	private static final String CACHE_INVALID = "[I_N_V_A_L_I_D]";
-
 	static {
 		profiler.setLogger(LOGGER);
 	}
 
 	final public Language language;
+
 	final private Map<String, Vocabula> articles;
 	final private Map<Integer, Vocabula> index;
 	private int definitionsCount;
 	private int vocabulasCount;
+	private static final String CACHE_INVALID = "[I_N_V_A_L_I_D]";
 	transient private String cachedRequest;
 	transient private Optional<Vocabula> optCachedResponse;
 	transient private boolean invalidateStatistics = true;

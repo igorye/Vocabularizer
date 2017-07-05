@@ -93,10 +93,11 @@ public class WebTabPane extends TabPane {
 		return getActiveWebView().map(WebView::getEngine);
 	}
 
-	public String getActiveViewSelection() {
-		return getActiveEngine()
-				       .map(engine -> ((String) engine.executeScript("window.getSelection().toString()")).trim())
-				       .orElse("");
+	public Optional<String> getActiveViewSelection() {
+		Optional<String> selection =
+				getActiveEngine().map(engine -> ((String) engine.executeScript("window.getSelection().toString()")).trim());
+
+		return selection.isPresent() && !selection.get().isEmpty() ? selection : Optional.empty();
 	}
 
 	public void selectTab(Tab tab) {

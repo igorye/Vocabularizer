@@ -34,9 +34,9 @@ public class GUIUtil {
 	}
 
 	//stackoverflow-impl
-	public static PopupWindow updateContextMenu(String arg,
+	public static PopupWindow updateContextMenu(Optional<String> arg,
 	                                            BiConsumer<ContextMenuContent, Optional<String>> menuItemsAppender) {
-		if (arg.isEmpty()) return null;
+//		if (arg.isEmpty()) return null;
 		@SuppressWarnings("deprecation")    final Iterator<Window> windows = Window.impl_getWindows();
 		while (windows.hasNext()) {
 			final Window window = windows.next();
@@ -50,7 +50,7 @@ public class GUIUtil {
 							Node bridge = popup.lookup(".context-menu");
 							ContextMenuContent cmc = (ContextMenuContent) ((Parent) bridge).getChildrenUnmodifiable().get(0);
 							addMenuItem("", null, cmc);
-							menuItemsAppender.accept(cmc, Optional.of(arg));
+							menuItemsAppender.accept(cmc, arg);
 							return (PopupWindow) window;
 						}
 					}

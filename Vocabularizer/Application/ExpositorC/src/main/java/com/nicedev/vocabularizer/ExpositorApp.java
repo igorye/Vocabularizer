@@ -36,7 +36,7 @@ public class ExpositorApp {
 
 	public static void main(String[] args) {
 		loadDictionary();
-		pronouncingService = new TTSPlaybackService(5);
+		pronouncingService = new TTSPlaybackService(1);
 		expositors = new MerriamWebsterParser[] { new MerriamWebsterParser(dictionary, false),
 		                                          new MerriamWebsterParser(dictionary, true) };
 		System.out.println(dictionary);
@@ -70,13 +70,13 @@ public class ExpositorApp {
 				}
 				if (query.startsWith("::")) {
 					query = query.substring(2, query.length()).trim();
-					System.out.println(dictionary.explainVocabula(query));
+					System.out.println(dictionary.explainVocabulas(query));
 					Optional<Vocabula> queried = dictionary.findVocabula(query);
 					queried.ifPresent(ExpositorApp::pronounce);
 					continue;
 				} else if (query.startsWith(":")) {
 					query = query.substring(1, query.length()).trim();
-					System.out.println(collectionToString(dictionary.filterHeadwords(query, "i"), query));
+					System.out.println(collectionToString(dictionary.filterHeadwords(query, false), query));
 					continue;
 				}
 				String[] tokens = query.split("\\s{2,}|\t|\\[|\\\\");
@@ -109,7 +109,7 @@ public class ExpositorApp {
 					Dictionary.save(dictionary, storageEn.concat(".back"));
 			}
 		} catch (Exception e) {
-			e.printStackTrace();
+			LOGGER.error("{} {}", e, e.getMessage());
 		} finally {
 			Dictionary.save(dictionary, storageEn);
 			pronouncingService.release();
@@ -136,10 +136,11 @@ public class ExpositorApp {
 	private static String collectionToString(Collection<String> strings, String sortBy) {
 		StringBuilder res = new StringBuilder();
 		if (!strings.isEmpty()) {
-			String listed = strings.parallelStream().sorted()
+			String listed = strings.parallelStream()
 					                .collect(partitioningBy(s -> !s.startsWith(sortBy))).values().stream()
 					                .flatMap(List::stream)
 					                .map(s -> String.format("  %s %s", s, dictionary.getPartsOfSpeech(s)))
+													.sorted()
 					                .collect(joining("\n"));
 			int size = strings.size();
 			res.append(listed).append(String.format("%ntotal %d entr%s%n", size, size > 1 ? "ies" : "y"));
@@ -147,15 +148,14 @@ public class ExpositorApp {
 			res.append("Nothing found\n");
 		}
 		return res.toString();
-
 	}
 
 	private static Collection<String> getSuggestions() {
 		return Stream.of(expositors)
-				       .parallel()
-				       .sorted(Comparator.comparingInt(expositor -> expositor.priority))
 				       .flatMap(expositor -> expositor.getRecentSuggestions().stream())
-				       .collect(toSet());
+							 .distinct()
+				       .sorted()
+				       .collect(toList());
 	}
 
 	@SuppressWarnings("unchecked")
