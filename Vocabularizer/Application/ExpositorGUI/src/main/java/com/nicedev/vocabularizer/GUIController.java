@@ -24,7 +24,10 @@ import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.concurrent.Worker;
 import javafx.concurrent.WorkerStateEvent;
-import javafx.event.*;
+import javafx.event.ActionEvent;
+import javafx.event.Event;
+import javafx.event.EventHandler;
+import javafx.event.EventTarget;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.Cursor;
@@ -666,11 +669,7 @@ public class GUIController implements Initializable {
 
 	@FXML
 	private void onContextMenuRequested(ContextMenuEvent e) {
-		Node source = (Node) e.getSource();
-		Optional<String> context = Optional.empty();
-		if (source instanceof WebView) {
-			context = tabPane.getActiveViewSelection();
-		}
+		Optional<String> context = Optional.of(getSelectedText()).filter(Strings::notBlank);
 		GUIUtil.updateContextMenu(context, this::appendContextMenuItems);
 	}
 
@@ -899,7 +898,10 @@ public class GUIController implements Initializable {
 				selection = tabPane.getActiveViewSelection().orElse("");
 				break;
 			case "ComboBox":
-				selection = queryBoxValue.getValue().trim();
+				IndexRange selectionRange = queryBox.editorProperty().get().selectionProperty().get();
+				selection = selectionRange.getLength() > 0
+						            ? queryBoxValue.getValue().substring(selectionRange.getStart(), selectionRange.getEnd())
+						            : queryBoxValue.getValue().trim();
 				break;
 			case "TableView":
 				selection = selectedHWItems.stream().collect(joining("\n"));
@@ -927,37 +929,61 @@ public class GUIController implements Initializable {
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 	private void appendContextMenuItems(Object contextMenu, Optional<String> context) {
-		EventHandler<ActionEvent> handleQueryEH = this::onSearch;
-		GUIUtil.addMenuItem("Explain", handleQueryEH, contextMenu);
-		// headwords comparing available only from tableView
+		appendSearchMenuItem(contextMenu, context);
 		boolean appendingToTableViewContextMenu = contextMenu instanceof ContextMenu;
-		if (appendingToTableViewContextMenu && selectedHWItems.size() > 1) {
+		if (appendingToTableViewContextMenu) appendCompareMenuItem(contextMenu);
+		appendTranslationMenuItem(contextMenu, context);
+		appendPronounceMenuItem(contextMenu, context, appendingToTableViewContextMenu);
+		// allow deletion only of an active article or from list
+		if (!context.isPresent()) appendDeleteMenuItem(contextMenu);
+	}
+
+	private void appendSearchMenuItem(Object contextMenu, Optional<String> context) {
+		if (context.isPresent() || tableViewIsAContextSource()) {
+			EventHandler<ActionEvent> handleQueryEH = this::onSearch;
+			GUIUtil.addMenuItem("Explain", handleQueryEH, contextMenu);
+		}
+	}
+
+	private void appendCompareMenuItem(Object contextMenu) {
+		if (selectedHWItems.size() > 1) {
 			EventHandler<ActionEvent> compareHeadwordsEH = e -> compareHeadwords();
 			GUIUtil.addMenuItem("Compare", compareHeadwordsEH, contextMenu);
 		}
-		// default translation behavior is not available in compare mode
-		if (!context.filter(s -> s.contains("|")).isPresent()) {
-			EventHandler<ActionEvent> showGTTranslationEH = e -> showTranslation(context, requestFormatterGT);
+	}
 
+	private void appendTranslationMenuItem(Object contextMenu, Optional<String> context) {
+		Optional<String> translationContext = context.isPresent()
+				                                      ? context
+				                                      : getAssignedVocabula(tabPane.getActiveTab()).map(voc -> voc.headWord);
+		if (translationContext.isPresent() || tableViewIsAContextSource()) {
+			EventHandler<ActionEvent> showGTTranslationEH = e -> showTranslation(translationContext, requestFormatterGT);
 			final Function<String, String> requestFormatterWH = s -> String.format(WH_REQUEST_URL, s);
-			EventHandler<ActionEvent> showWHTranslationEH = e -> showTranslation(context, requestFormatterWH);
-
+			EventHandler<ActionEvent> showWHTranslationEH = e -> showTranslation(translationContext, requestFormatterWH);
 			Menu translations = new Menu("Translate");
 			GUIUtil.addMenuItem(" via Google", showGTTranslationEH, translations);
 			GUIUtil.addMenuItem(" via WooordHunt", showWHTranslationEH, translations);
 			GUIUtil.addMenuItem(translations, contextMenu);
 		}
+	}
 
+	private boolean tableViewIsAContextSource() {
+		return tabPane.getSelectedTabIndex() == 0
+				       && relevantSelectionOwner == hwTable
+				       && !hwTable.getSelectionModel().getSelectedItems().isEmpty();
+	}
+
+	private void appendPronounceMenuItem(Object contextMenu, Optional<String> context,
+	                                     boolean appendingToTableViewContextMenu) {
 		boolean showExtendedPronounceSubmenu = !appendingToTableViewContextMenu
 				                                       && tabPane.getActiveTab() instanceof ExpositorTab
 				                                       && !context.isPresent();
 		Optional<String> pronunciationContext = context.isPresent()
 				                                        ? context
 				                                        : getAssignedVocabula(tabPane.getActiveTab()).map(voc -> voc.headWord);
-
 		EventHandler<ActionEvent> pronounceSelectionEH = e -> pronounce(pronunciationContext);
 		EventHandler<ActionEvent> pronounceArticleEH = e -> pronounce(pronunciationContext, true);
-
+		if (pronunciationContext.isPresent() || tableViewIsAContextSource())
 		if (showExtendedPronounceSubmenu) {
 			Menu pronounce = new Menu("Pronounce");
 			GUIUtil.addMenuItem(" headword", pronounceSelectionEH, pronounce);
@@ -966,13 +992,14 @@ public class GUIController implements Initializable {
 		} else {
 			GUIUtil.addMenuItem("Pronounce", pronounceSelectionEH, contextMenu);
 		}
-		// allow deletion only of an active article or from list
-		if (context.isPresent() || tabPane.getActiveTab() instanceof TranslationTab) return;
+	}
 
-		GUIUtil.addMenuItem("", null, contextMenu);
-//		EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadwords(context);
-		EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadwords();
-		GUIUtil.addMenuItem("Delete headword", deleteHeadwordEH, contextMenu);
+	private void appendDeleteMenuItem(Object contextMenu) {
+		if (tabPane.getActiveTab() instanceof ExpositorTab || tableViewIsAContextSource()) {
+			GUIUtil.addMenuItem("", null, contextMenu);
+			EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadwords();
+			GUIUtil.addMenuItem("Delete headword", deleteHeadwordEH, contextMenu);
+		}
 	}
 
 	private void compareHeadwords() {
@@ -1242,7 +1269,13 @@ public class GUIController implements Initializable {
 		confirm.showAndWait().filter(response -> response == ButtonType.YES).ifPresent(response -> {
 			if (tabPane.getSelectedTabIndex() > 0 && headwords.contains(getActiveTabHeadword()))
 				tabPane.removeActiveTab();
-			Platform.runLater(getDeletionTask(headwords));
+			List<String> available = headwords.stream()
+						                       .map(String::trim)
+						                       .filter(headword -> dictionary.containsVocabula(headword))
+						                       .collect(toList());
+			hwData.removeAll(available);
+			updateTableState(false);
+			Platform.runLater(getDeletionTask(available));
 		});
 	}
 
@@ -1250,15 +1283,9 @@ public class GUIController implements Initializable {
 		return new Task<Void>() {
 			@Override
 			protected Void call() throws Exception {
-				List<String> available = headwords.stream()
-						                       .map(String::trim)
-						                       .filter(headword -> dictionary.containsVocabula(headword))
-						                       .collect(toList());
-				LOGGER.debug("deleted entries: {}", available);
-				if (!available.isEmpty()) {
-					hwData.removeAll(available);
-					updateTableState(false);
-					available.forEach(dictionary::removeVocabula);
+				LOGGER.debug("deleting entries: {}", headwords);
+				if (!headwords.isEmpty()) {
+					headwords.forEach(dictionary::removeVocabula);
 					saveDictionary();
 					updateStatistics(true);
 					if (tabPane.getTabs().size() == 1) updateQueryBoxText(queryBoxValue.getValue(), true);
