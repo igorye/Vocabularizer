@@ -24,7 +24,7 @@
 					</descriptorRefs>
 					<archive>
 						<manifest>
-							<mainClass>${project.groupId}.${project.artifactId}</mainClass>
+							<mainClass>${project.groupId}.ExpositorApp</mainClass>
 						</manifest>
 					</archive>
 				</configuration>

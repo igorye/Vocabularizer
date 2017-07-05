@@ -107,7 +107,7 @@
 				</Tooltip>
 			</tooltip>
 		</Button>
-		<ComboBox fx:id="queryBox" editable="true" layoutX="136.0" layoutY="474.0" onKeyReleased="#onQueryBoxKeyReleased"
+		<ComboBox fx:id="queryBox" editable="true" layoutX="136.0" layoutY="474.0" onKeyReleased="#onQueryBoxKeyReleased" onKeyPressed="#onQueryBoxKeyPressed"
 							prefHeight="25.0" AnchorPane.bottomAnchor="1.0" AnchorPane.leftAnchor="136.0"
 							AnchorPane.rightAnchor="222.0"/>
 	</children>

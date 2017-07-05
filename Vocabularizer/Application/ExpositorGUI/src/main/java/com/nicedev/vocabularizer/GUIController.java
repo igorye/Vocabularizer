@@ -9,6 +9,7 @@ import com.nicedev.vocabularizer.dictionary.model.IndexingService;
 import com.nicedev.vocabularizer.dictionary.model.Vocabula;
 import com.nicedev.vocabularizer.dictionary.parser.MerriamWebsterParser;
 import com.nicedev.vocabularizer.gui.*;
+import com.nicedev.vocabularizer.service.DelayedFilteringTaskService;
 import com.nicedev.vocabularizer.service.DelayedTaskService;
 import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyObjectWrapper;
@@ -23,9 +24,7 @@ import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.concurrent.Worker;
 import javafx.concurrent.WorkerStateEvent;
-import javafx.event.ActionEvent;
-import javafx.event.Event;
-import javafx.event.EventHandler;
+import javafx.event.*;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.Cursor;
@@ -58,6 +57,7 @@ import java.util.concurrent.Executors;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -73,7 +73,6 @@ import static java.util.Arrays.asList;
 import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.*;
 import static javafx.scene.input.KeyCode.INSERT;
-import static javafx.scene.input.KeyCode.SPACE;
 
 public class GUIController implements Initializable {
 
@@ -103,27 +102,26 @@ public class GUIController implements Initializable {
 	//	    @FXML private TabPane tabPane;
 	@FXML
 	private WebTabPane tabPane;
-
 	private final Label NOTHING_FOUND = new Label("Nothing found");
 	private final Label NO_MATCH = new Label("No matches");
 	private final Label SEARCHING = new Label("Searching...");
 
 	static final String BASE_PACKAGE = "com.nicedev";
 	private final String PROJECT_NAME = "Vocabularizer";
+
 	private final String USER_HOME = System.getProperties().getProperty("user.home");
 	private final String PROJECT_HOME = System.getProperty(PROJECT_NAME + ".home",
 	                                                       String.format("%s\\%s", USER_HOME, PROJECT_NAME));
 	private final String storageEn = String.format("%s\\%s.dict", PROJECT_HOME, "english");
 	private final String HISTORY_FILENAME = PROJECT_NAME + ".history";
 	private final boolean ALLOW_PARALLEL_STREAM = Boolean.valueOf(System.getProperty("allowParallelStream", "false"));
-
 	private final int INDEXING_ALGO = Integer.valueOf(System.getProperty("indexingAlgo", "0"));
 	private final int FILTER_CACHE_SIZE = Integer.valueOf(System.getProperty("fcSize", "25"));
-
 	private final String COMPARING_DELIMITER = " | ";
 	private final String ALL_MATCH = "";
 	private final int LIST_FILTERING_DELAY = 500;
 	private final int INPUT_FILTERING_DELAY = 400;
+	private final int EXPLAIN_SELECTION_DELAY = 500;
 	private final int PRONUNCIATION_DELAY = 500;
 	private static final int RECENT_QUERIES_TO_LOAD = 150;
 	private static final int FILTER_DELAY = 500;
@@ -149,13 +147,16 @@ public class GUIController implements Initializable {
 	private boolean filterOn = true;
 	private boolean clearOnEsc = true;
 	private final StringProperty queryBoxValue = new SimpleStringProperty();
-	private boolean ctrlIsDown = false;
-	private final DelayedTaskService<Collection<String>> queryBoxFiltering;
-	private final DelayedTaskService<String> tableItemFiltering;
+	private final DelayedFilteringTaskService<Collection<String>> queryBoxFiltering;
+	private final DelayedFilteringTaskService<String> tableItemFiltering;
+	private final DelayedTaskService<String> explainSelection;
 	private final ExecutorService executor;
 	private IndexingService indexer;
 	private int leastSelectedIndex;
 	private int caretPos = 0;
+	private boolean ctrlIsDown = false;
+	private boolean commandCtrl = false;
+	private boolean mouseSelectionMode = false;
 
 	@SuppressWarnings("unchecked")
 	public GUIController() {
@@ -164,11 +165,12 @@ public class GUIController implements Initializable {
 		res = getClass().getProtectionDomain().getClassLoader().getResource("view.js").toExternalForm();
 		jsHref = res != null ? res : "";
 		tableItemFiltering = getTableFilteringTask();
-		queryBoxFiltering = getQueryFiltering();
+		queryBoxFiltering = getQueryFilteringTask();
+		explainSelection = getExplainSelectionTask();
 		executor = Executors.newCachedThreadPool();
 	}
 
-	private DelayedTaskService<String> getTableFilteringTask() {
+	private DelayedFilteringTaskService<String> getTableFilteringTask() {
 		Function<String, Task<String>> tableFilterTaskProvider = pattern -> new Task<String>() {
 			@Override
 			protected String call() throws Exception {
@@ -177,8 +179,9 @@ public class GUIController implements Initializable {
 				return isCancelled() ? queryBoxValue.get() : selectedItem;
 			}
 		};
-		DelayedTaskService<String> task = new DelayedTaskService<>(tableFilterTaskProvider, FILTER_DELAY);
-		task.setOnSucceeded(event -> {
+		DelayedFilteringTaskService<String> filteringTask =
+				new DelayedFilteringTaskService<>(tableFilterTaskProvider, FILTER_DELAY);
+		filteringTask.setOnSucceeded(event -> {
 			String selectedItem = (String) event.getSource().getValue();
 			updateQueryBoxText(selectedItem, false);
 			Map<String, Collection<String>> index = indexer.getIndex();
@@ -187,23 +190,40 @@ public class GUIController implements Initializable {
 					                                          .collect(toList());
 			hwData.setAll(referencesAtSelected);
 		});
-		return task;
+		return filteringTask;
 	}
 
 	@SuppressWarnings("unchecked")
-	private DelayedTaskService<Collection<String>> getQueryFiltering() {
+	private DelayedFilteringTaskService<Collection<String>> getQueryFilteringTask() {
 		Function<String, Task<Collection<String>>> queryFilterTaskProvider = pattern -> new Task<Collection<String>>() {
 			@Override
 			protected Collection<String> call() throws Exception {
 				return isCancelled() ? Collections.emptyList() : findReferences(pattern, toggleRE.isSelected());
 			}
 		};
-		DelayedTaskService<Collection<String>> task = new DelayedTaskService<>(queryFilterTaskProvider,
-		                                                                       INPUT_FILTERING_DELAY);
-		task.setOnSucceeded(event -> {
+		DelayedFilteringTaskService<Collection<String>> filteringTask =
+				new DelayedFilteringTaskService<>(queryFilterTaskProvider, INPUT_FILTERING_DELAY);
+		filteringTask.setOnSucceeded(event -> {
 			if (tabPane.getSelectedTabIndex() == 0) hwData.setAll((Collection<String>) event.getSource().getValue());
 		});
-		return task;
+		return filteringTask;
+	}
+
+	private DelayedTaskService<String> getExplainSelectionTask() {
+		Supplier<Task<String>> explainTaskSupplier = () -> new Task<String>() {
+			@Override
+			protected String call() throws Exception {
+				Task<String> selectedTextTask = getSelectedTextTask();
+				Platform.runLater(selectedTextTask);
+				return isCancelled() ? "" : selectedTextTask.get();
+			}
+		};
+		DelayedTaskService<String> explainTask = new DelayedTaskService<>(explainTaskSupplier, EXPLAIN_SELECTION_DELAY);
+		explainTask.setOnSucceeded(event -> {
+			String selection = (String) event.getSource().getValue();
+			if (!selection.isEmpty() && !mouseSelectionMode) handleQuery(selection);
+		});
+		return explainTask;
 	}
 
 	@Override
@@ -271,21 +291,24 @@ public class GUIController implements Initializable {
 		hwColumn.setCellValueFactory(hwCellValueFactory);
 		posColumn.setCellValueFactory(posCellValueFactory);
 		formsColumn.setCellValueFactory(formsCellValueFactory);
-		mainScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> ctrlIsDown = event.isControlDown());
-		mainScene.addEventFilter(KeyEvent.KEY_RELEASED, event -> ctrlIsDown = event.isControlDown());
 		tabPane.focusedProperty().addListener(tabPaneFocusChangeListener);
 		tabPane.getSelectionModel().selectedItemProperty().addListener(tabSelectionListener);
 		queryBoxFiltering.setExecutor(executor);
 		queryBoxFiltering.start();
 		tableItemFiltering.setExecutor(executor);
 		tableItemFiltering.start();
+		explainSelection.setExecutor(executor);
+		explainSelection.start();
+		mainScene.addEventFilter(KeyEvent.KEY_PRESSED, event -> ctrlIsDown = event.isControlDown());
+		mainScene.addEventFilter(KeyEvent.KEY_RELEASED, event -> ctrlIsDown = event.isControlDown());
 		updateStatistics(false);
 	}
 
 	private void initIndex() {
 		EventHandler<WorkerStateEvent> onSucceededEventHandler = event -> {
 			resetCache();
-			hwData.setAll(findReferences(queryBoxValue.get()));
+			String filter = queryBoxValue.get();
+			hwData.setAll(findReferences(filter));
 		};
 		indexer = new IndexingService(dictionary, onSucceededEventHandler, ALLOW_PARALLEL_STREAM, INDEXING_ALGO,
 		                              referencesCache);
@@ -391,7 +414,6 @@ public class GUIController implements Initializable {
 				             Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
 			}
 		}
-
 	};
 
 	private void engageFiltering(String pattern, int delay) {
@@ -443,6 +465,7 @@ public class GUIController implements Initializable {
 		} else {
 			if (selectedHWItems.size() > 0) selectedIndex = 0;
 		}
+		commandCtrl = event.isControlDown();
 	}
 
 	@FXML
@@ -453,10 +476,12 @@ public class GUIController implements Initializable {
 	@FXML
 	protected void onTableViewKeyPressed(KeyEvent event) {
 		if (event.getCode() == INSERT) engageTableSelectedItemFiltering();
+		commandCtrl = event.isControlDown();
 	}
 
 	@FXML
 	protected void onTableViewKeyReleased(KeyEvent event) {
+		LOGGER.debug("onTableViewKeyReleased");
 		if (event.getEventType() != KeyEvent.KEY_RELEASED) return;
 		String query = selectedHWItems.size() > 0 ? hwTable.getSelectionModel().getSelectedItem() : "";
 		KeyCode keyCode = event.getCode();
@@ -467,15 +492,15 @@ public class GUIController implements Initializable {
 				} else handleQuery(query);
 				break;
 			case DELETE:
-				deleteHeadword(Optional.empty());
+				deleteHeadwords();
 				break;
 			case ESCAPE:
 				resetFilter();
 				break;
 			default:
-				if (!event.isControlDown() && event.getText().matches("[\\p{Graph}]")) {
+				if (!commandCtrl && event.getText().matches("[\\p{Graph}]")) {
 					updateQueryBoxText(event.getText());
-				} else if (event.isControlDown() && event.getCode() == SPACE) {
+				} else if (commandCtrl && event.getCode() == INSERT) {
 					tableItemFiltering.cancel();
 				}
 		}
@@ -494,10 +519,13 @@ public class GUIController implements Initializable {
 		}
 	}
 
-	@FXML
+	private void onWebViewKeyPressed(KeyEvent keyEvent) {
+		commandCtrl = keyEvent.isControlDown();
+	}
+
 	private void onWebViewKeyReleased(KeyEvent event) {
+		LOGGER.debug("onWebViewKeyReleased");
 		if (event.getEventType() != KeyEvent.KEY_RELEASED) return;
-		Node sourceNode = (Node) event.getSource();
 		String query = getSelectedText();
 		KeyCode keyCode = event.getCode();
 		switch (keyCode) {
@@ -523,15 +551,17 @@ public class GUIController implements Initializable {
 				}
 				break;
 			case CONTEXT_MENU:
-				double x = ((WebViewTab) tabPane.getActiveTab()).getCursorPos().getValue().getX();
-				double y = ((WebViewTab) tabPane.getActiveTab()).getCursorPos().getValue().getY();
-				Event.fireEvent(sourceNode, new MouseEvent(MouseEvent.MOUSE_RELEASED, x, y, 0, 0,
-				                                           MouseButton.SECONDARY, 1,
-				                                           event.isShiftDown(), event.isControlDown(),
-				                                           event.isAltDown(), event.isMetaDown(),
-				                                           false, false,
-				                                           true, false,
-				                                           true, true, null));
+				WebViewTab activeTab = (WebViewTab) tabPane.getActiveTab();
+				double x = activeTab.getCursorPos().getValue().getX();
+				double y = activeTab.getCursorPos().getValue().getY();
+				Event.fireEvent((EventTarget) event.getSource(),
+				                new MouseEvent(MouseEvent.MOUSE_RELEASED, x, y, 0, 0,
+				                               MouseButton.SECONDARY, 1,
+				                               event.isShiftDown(), event.isControlDown(),
+				                               event.isAltDown(), event.isMetaDown(),
+				                               false, false,
+				                               true, false,
+				                               true, true, null));
 				break;
 		}
 		event.consume();
@@ -546,7 +576,13 @@ public class GUIController implements Initializable {
 	};
 
 	@FXML
+	protected void onQueryBoxKeyPressed(KeyEvent event) {
+		commandCtrl = event.isControlDown();
+	}
+
+	@FXML
 	protected void onQueryBoxKeyReleased(KeyEvent event) {
+		LOGGER.debug("onQueryBoxKeyReleased");
 		if (event.getEventType() != KeyEvent.KEY_RELEASED) return;
 		String query = queryBoxValue.getValue();
 		KeyCode keyCode = event.getCode();
@@ -566,11 +602,12 @@ public class GUIController implements Initializable {
 				break;
 			case ESCAPE:
 				if (clearOnEsc) resetFilter();
+				break;
 			case W:
 				if (event.isControlDown()) {
 					tabPane.removeActiveTab();
-					break;
 				}
+				break;
 			default:
 				if (!event.isControlDown() && event.getText().matches("[\\p{Graph} ]")) {
 					mainTab.setText(queryBoxValue.getValue());
@@ -608,38 +645,31 @@ public class GUIController implements Initializable {
 
 	@FXML
 	protected void onMouseClicked(MouseEvent event) {
-		ctrlIsDown = event.isControlDown();
 		if (event.getButton().equals(MouseButton.PRIMARY) && event.getClickCount() == 2) {
-			event.consume();
 			if (tabPane.getActiveTab() instanceof TranslationTab) return;
-			boolean mainTabActive = tabPane.getSelectedTabIndex() == 0;
-			String selection = mainTabActive
-					                   ? selectedHWItems.stream().findFirst().orElse("")
-					                   : tabPane.getActiveViewSelection();
-			if (!selection.isEmpty()) {
-				if (mainTabActive) handleQuery(selection);
-				else handleQuery(selection, tabPane.getActiveTab().getText());
+			if (tabPane.getSelectedTabIndex() == 0) {
+				selectedHWItems.stream().findFirst().ifPresent(this::handleQuery);
 			}
 		}
+		mouseSelectionMode = true;
+		event.consume();
 	}
 
 	@FXML
 	protected void onSearch(@SuppressWarnings("unused") ActionEvent event) {
 		updateTableState();
 		Node source = relevantSelectionOwner;
+		commandCtrl = true;
 		Event.fireEvent(source, new KeyEvent(source, source, KeyEvent.KEY_RELEASED, "", "", KeyCode.ENTER,
-		                                     false, true, false, false));
+		                                     false, commandCtrl, false, false));
 	}
 
 	@FXML
 	private void onContextMenuRequested(ContextMenuEvent e) {
 		Node source = (Node) e.getSource();
-		String context = "";
+		Optional<String> context = Optional.empty();
 		if (source instanceof WebView) {
 			context = tabPane.getActiveViewSelection();
-			if (context.isEmpty()) {
-				context = getAssignedVocabula(tabPane.getActiveTab()).map(voc -> voc.headWord).orElse("");
-			}
 		}
 		GUIUtil.updateContextMenu(context, this::appendContextMenuItems);
 	}
@@ -649,16 +679,21 @@ public class GUIController implements Initializable {
 	 ************************************/
 
 	private void resetCache() {
-		Platform.runLater(() -> {
+		Runnable resetTask = () -> {
 			referencesCache.clear();
 			referencesCache.putPersistent(findReferences(ALL_MATCH));
 			try {
-				ofNullable(mainTab.getText()).filter(Strings::isBlank).ifPresent(val -> hwData.setAll(findReferences(val)));
+				ofNullable(mainTab.getText()).ifPresent(val -> hwData.setAll(findReferences(val)));
 			} catch (Exception e) {
 				LOGGER.error("clearQueue cache: unexpected exception - {} | {}", e,
 				             Exceptions.getPackageStackTrace(e, BASE_PACKAGE));
 			}
-		});
+		};
+		if (Platform.isFxApplicationThread()) {
+			resetTask.run();
+		} else {
+			Platform.runLater(resetTask);
+		}
 	}
 
 	private void updateTableState() {
@@ -708,23 +743,27 @@ public class GUIController implements Initializable {
 	public class JSBridge {
 		@SuppressWarnings("unused")
 		public void jsHandleQuery(String headWord, String highlight) {
-//			log("jsBridge: jsHandleQuery: requested %s", headWord);
 			// remove any tags
+			LOGGER.debug("jsHandleQuery");
 			headWord = headWord.replaceAll("<[^<>]+>", "");
 			handleQuery(headWord, highlight);
 		}
 
 		@SuppressWarnings("unused")
 		public void jsHandleQuery(String headWord) {
-//			log("jsBridge: jsHandleQuery: requested %s", headWord);
+			LOGGER.debug("jsHandleQuery");
 			handleQuery(headWord);
 		}
 	}
 
-	private final Consumer<WebViewTab> viewHndlrsSetter = tab -> {
+	private final Consumer<WebViewTab> viewHandlersSetter = tab -> {
 		WebView view = tab.getView();
 		view.setOnKeyReleased(this::onWebViewKeyReleased);
+		view.setOnKeyPressed(this::onWebViewKeyPressed);
 		view.setOnMouseClicked(this::onMouseClicked);
+		view.setOnMousePressed(this::onWebViewMousePressed);
+		view.setOnMouseReleased(this::onWebViewMouseReleased);
+		view.addEventHandler(MouseEvent.MOUSE_DRAGGED, this::onWebViewMouseDragged);
 		view.setOnContextMenuRequested(this::onContextMenuRequested);
 		view.focusedProperty().addListener((observable, oldValue, newValue) -> {
 			if (newValue) relevantSelectionOwner = view;
@@ -743,6 +782,25 @@ public class GUIController implements Initializable {
 		tab.setOnClosed(event -> pronouncingService.clearQueue());
 	};
 
+	private void onWebViewMouseDragged(MouseEvent mouseEvent) {
+		mouseSelectionMode = mouseEvent.isPrimaryButtonDown();
+		explainSelection.cancel();
+		mouseEvent.consume();
+	}
+
+	private void onWebViewMousePressed(MouseEvent mouseEvent) {
+		mouseSelectionMode = false;
+		if (!mouseEvent.isPrimaryButtonDown()) return;
+		commandCtrl = mouseEvent.isControlDown();
+		if (!mouseSelectionMode) explainSelection.restart();
+		mouseEvent.consume();
+	}
+
+	private void onWebViewMouseReleased(MouseEvent mouseEvent) {
+		mouseSelectionMode = false;
+		mouseEvent.consume();
+	}
+
 	private final BiFunction<String, String[], WebViewTab> expositorTabSupplier = (title, highlights) -> {
 		WebViewTab newTab;
 		if (title.contains(COMPARING_DELIMITER)) {
@@ -752,7 +810,7 @@ public class GUIController implements Initializable {
 			newTab = new ExpositorTab(title, dictionary.findVocabula(title));
 			newTab.setOnSelected(vocabulaFirstSelectionHandler(highlights));
 		}
-		newTab.addHandlers(viewHndlrsSetter);
+		newTab.addHandlers(viewHandlersSetter);
 		return newTab;
 	};
 
@@ -762,6 +820,7 @@ public class GUIController implements Initializable {
 				Optional<Vocabula> optVocabula = getAssignedVocabula(tab);
 				String headWord = optVocabula.map(voc -> voc.headWord).orElse(tab.getTooltip().getText());
 				if (!optVocabula.isPresent()) {
+					LOGGER.debug("vocabulaFirstSelectionHandler::vocabulaNotPresent");
 					handleQuery(headWord);
 					updateQueryBoxText(headWord, false);
 				} else {
@@ -803,7 +862,7 @@ public class GUIController implements Initializable {
 	private BiFunction<String, String[], WebViewTab> translationTabSupplier(Function<String, String> requestFormatter) {
 		return (title, _arg) -> {
 			WebViewTab newTab = new TranslationTab(title, requestFormatter.apply(encodeURL(title)));
-			newTab.addHandlers(viewHndlrsSetter);
+			newTab.addHandlers(viewHandlersSetter);
 			return newTab;
 		};
 	}
@@ -837,7 +896,7 @@ public class GUIController implements Initializable {
 		String selectionOwnerName = relevantSelectionOwner.getClass().getSimpleName();
 		switch (selectionOwnerName) {
 			case "WebView":
-				selection = tabPane.getActiveViewSelection();
+				selection = tabPane.getActiveViewSelection().orElse("");
 				break;
 			case "ComboBox":
 				selection = queryBoxValue.getValue().trim();
@@ -846,6 +905,15 @@ public class GUIController implements Initializable {
 				selection = selectedHWItems.stream().collect(joining("\n"));
 		}
 		return selection;
+	}
+
+	private Task<String> getSelectedTextTask() {
+		return new Task<String>() {
+			@Override
+			protected String call() throws Exception {
+				return isCancelled() ? "" : getSelectedText();
+			}
+		};
 	}
 
 	private ContextMenu getTableViewContextMenu() {
@@ -880,22 +948,30 @@ public class GUIController implements Initializable {
 			GUIUtil.addMenuItem(translations, contextMenu);
 		}
 
-		EventHandler<ActionEvent> pronounceHeadwordEH = e -> pronounce(context);
-		EventHandler<ActionEvent> pronounceArticleEH = e -> pronounce(context, true);
+		boolean showExtendedPronounceSubmenu = !appendingToTableViewContextMenu
+				                                       && tabPane.getActiveTab() instanceof ExpositorTab
+				                                       && !context.isPresent();
+		Optional<String> pronunciationContext = context.isPresent()
+				                                        ? context
+				                                        : getAssignedVocabula(tabPane.getActiveTab()).map(voc -> voc.headWord);
 
-		boolean showExtendedPronounceMenu = !appendingToTableViewContextMenu && tabPane.getActiveTab() instanceof ExpositorTab;
-		if (showExtendedPronounceMenu) {
+		EventHandler<ActionEvent> pronounceSelectionEH = e -> pronounce(pronunciationContext);
+		EventHandler<ActionEvent> pronounceArticleEH = e -> pronounce(pronunciationContext, true);
+
+		if (showExtendedPronounceSubmenu) {
 			Menu pronounce = new Menu("Pronounce");
-			GUIUtil.addMenuItem(" headword", pronounceHeadwordEH, pronounce);
+			GUIUtil.addMenuItem(" headword", pronounceSelectionEH, pronounce);
 			GUIUtil.addMenuItem(" article", pronounceArticleEH, pronounce);
 			GUIUtil.addMenuItem(pronounce, contextMenu);
 		} else {
-			GUIUtil.addMenuItem("Pronounce", pronounceHeadwordEH, contextMenu);
+			GUIUtil.addMenuItem("Pronounce", pronounceSelectionEH, contextMenu);
 		}
+		// allow deletion only of an active article or from list
+		if (context.isPresent() || tabPane.getActiveTab() instanceof TranslationTab) return;
 
 		GUIUtil.addMenuItem("", null, contextMenu);
-
-		EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadword(context);
+//		EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadwords(context);
+		EventHandler<ActionEvent> deleteHeadwordEH = e -> deleteHeadwords();
 		GUIUtil.addMenuItem("Delete headword", deleteHeadwordEH, contextMenu);
 	}
 
@@ -914,9 +990,10 @@ public class GUIController implements Initializable {
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 	private void showTranslation(Optional<String> textToTranslate, Function<String, String> requestFormatter) {
-		if (relevantSelectionOwner == hwTable && ctrlIsDown)
+		if (relevantSelectionOwner == hwTable && commandCtrl) {
 			tabPane.insertIfAbsent(selectedHWItems, translationTabSupplier(requestFormatter), TranslationTab.class);
-		else {
+			commandCtrl = ctrlIsDown;
+		} else {
 			String text = textToTranslate.orElse(selectedHWItems.stream().sorted().collect(joining("\n")))
 					              .replaceAll("\\t+| {2,}", " ");
 			String translationURL = requestFormatter.apply(encodeURL(text));
@@ -949,6 +1026,7 @@ public class GUIController implements Initializable {
 
 	private Runnable getQueryHandlingTask(String query, String... textsToHighlight) {
 		return () -> {
+			LOGGER.debug("Handling request: {}", query);
 			boolean changeOccurred = false;
 			try {
 				int defCount = dictionary.getDefinitionsCount();
@@ -957,54 +1035,59 @@ public class GUIController implements Initializable {
 				Optional<Vocabula> optVocabula = acceptSimilar ? Optional.empty() : dictionary.findVocabula(query);
 				final String fQuery = query.replaceAll("~", "").trim();
 				if (optVocabula.isPresent()) {
-					showQueryResult(optVocabula.get(), textsToHighlight);
+					showResponse(optVocabula.get(), textsToHighlight);
 					appendRequestHistory(fQuery);
 				} else {
 					acceptSimilar |= toggleSimilar.isSelected();
-					Set<Vocabula> vocabulas = findVocabula(fQuery, acceptSimilar);
-					Function<Set<Vocabula>, Set<Vocabula>> availableOf = vocabulaSet -> {
+					Collection<Vocabula> vocabulas = findVocabula(fQuery, acceptSimilar);
+					LOGGER.debug("on request \"{}\" found: {}",
+					             fQuery, com.nicedev.util.Collections.toString(vocabulas, vocabula -> vocabula.headWord));
+					Function<Collection<Vocabula>, Collection<Vocabula>> availableOf = vocabulaSet -> {
 						return dictionary.getVocabulas(vocabulaSet.stream().map(voc -> voc.headWord).collect(toSet()));
 					};
-					Set<Vocabula> availableVs = availableOf.apply(vocabulas);
+					Collection<Vocabula> availableVs = availableOf.apply(vocabulas);
 					int nAdded = dictionary.addVocabulas(vocabulas);
+					LOGGER.debug("added {} vocabula(s)", nAdded);
 					if (!vocabulas.isEmpty() && nAdded > 0) {
 						updatesCount++;
-						Set<Vocabula> addedVs = availableOf.apply(vocabulas);
+						Collection<Vocabula> addedVs = availableOf.apply(vocabulas);
 						addedVs.removeAll(availableVs);
-						List<String> addedHWs = addedVs.stream().map(v -> v.headWord).collect(toList());
+						List<String> addedHWs = addedVs.stream().map(v -> v.headWord).distinct().collect(toList());
 						Platform.runLater(() -> {
 							hwData.setAll(addedHWs);
 							indexer.alter(addedVs);
 						});
 						if (nAdded == 1 && addedHWs.contains(fQuery)) {
-							showQueryResult(addedVs.iterator().next(), textsToHighlight);
+							Vocabula found = addedVs.iterator().next();
+							LOGGER.debug("found \"{}\"", found.headWord);
+							showResponse(found, textsToHighlight);
 						} else {
 							Platform.runLater(() -> {
 								tabPane.removeTab(fQuery);
 								tabPane.selectTab(mainTab);
+								updateQueryBoxText(fQuery, false);
 							});
 						}
-						updateQueryBoxText(fQuery, false);
 						appendRequestHistory(fQuery);
 						resetCache();
 					} else {
 						List<String> suggestions = getSuggestions(fQuery);
-						boolean lookForReferencingVocabula = false;
+						LOGGER.debug("on request \"{}\" nothing found, suggestions: {}", suggestions);
+						boolean showTranslation = false;
 						if (!suggestions.isEmpty()) {
 							Platform.runLater(() -> hwData.setAll(suggestions));
-							String suggested = suggestions.get(0);
-							if (suggestions.size() == 1 && Strings.partEquals(suggested, fQuery)) {
-								dictionary.findVocabula(suggested).ifPresent(vocabula -> showQueryResult(vocabula, fQuery));
+							String suggested;
+							if (suggestions.size() == 1 && Strings.partEquals(suggested = suggestions.get(0), fQuery)) {
+								LOGGER.debug("among suggested found present: \"{}\"", suggested);
+								dictionary.findVocabula(suggested).ifPresent(vocabula -> showResponse(vocabula, fQuery));
 							} else {
-								lookForReferencingVocabula = true;
+								showTranslation = true;
 							}
-						} else {
-							lookForReferencingVocabula = true;
+						} else if (!showReferencingVocabula(fQuery)) {
+							showTranslation = true;
 						}
-						if (!lookForReferencingVocabula || !showReferencingVocabula(fQuery)) {
-							updateQueryBoxText(lookForReferencingVocabula ? fQuery.concat(" ") : fQuery, false);
-							if (suggestions.isEmpty())
-								Platform.runLater(() -> showTranslation(Optional.of(fQuery), requestFormatterGT));
+						if (showTranslation) {
+							Platform.runLater(() -> showTranslation(Optional.of(fQuery), requestFormatterGT));
 						}
 					}
 				}
@@ -1020,7 +1103,7 @@ public class GUIController implements Initializable {
 	}
 
 	@SuppressWarnings("unchecked")
-	private Set<Vocabula> findVocabula(String query, boolean acceptSimilar) {
+	private Collection<Vocabula> findVocabula(String query, boolean acceptSimilar) {
 		return Stream.of(parsers)
 				       .parallel()
 				       .map(parser -> new Object[] { parser.priority, parser.getVocabula(query, acceptSimilar) })
@@ -1032,9 +1115,9 @@ public class GUIController implements Initializable {
 	private List<String> getSuggestions(String match) {
 		return getStream(asList(parsers), ALLOW_PARALLEL_STREAM)
 				       .flatMap(parser -> parser.getRecentSuggestions().stream())
+				       .filter(Strings::notBlank)
 				       .distinct()
 				       .sorted(startsWithCmpr(match).thenComparing(indexOfCmpr(match)))
-				       .filter(Strings::notBlank)
 				       .collect(toList());
 	}
 
@@ -1055,24 +1138,22 @@ public class GUIController implements Initializable {
 			return false;
 		}
 		if (referencingVocabula.isPresent()) {
-			showQueryResult(referencingVocabula.get(), referenced);
+			showResponse(referencingVocabula.get(), referenced);
 			appendRequestHistory(referenced);
 			return true;
 		}
 		return referencingVocabula.isPresent();
 	}
 
-	private void showQueryResult(Vocabula vocabula, String... textsToHighlight) {
-		Platform.runLater(() -> showQueryResultImpl(vocabula, textsToHighlight));
+	private void showResponse(Vocabula vocabula, String... textsToHighlight) {
+		Platform.runLater(() -> showResponseImpl(vocabula, textsToHighlight));
 	}
 
-	private void showQueryResultImpl(Vocabula vocabula, String... textsToHighlight) {
+	private void showResponseImpl(Vocabula vocabula, String... textsToHighlight) {
 		Tab currentTab = tabPane.getActiveTab();
-		if (ctrlIsDown || tabPane.getTabs().size() == 1 || (currentTab instanceof TranslationTab)
-				    || (!tabPane.trySelectTab(ExpositorTab.sameTab(vocabula.headWord))
-						        && !(currentTab instanceof ExpositorTab
-								             || tabPane.trySelectTab(tab -> tab instanceof ExpositorTab)))) {
+		if (newTabAccteptable(vocabula, currentTab)) {
 			tabPane.insertTab(expositorTabSupplier.apply(vocabula.headWord, textsToHighlight), true);
+			commandCtrl = ctrlIsDown;
 		} else {
 			currentTab = tabPane.getActiveTab();
 			currentTab.setText(vocabula.headWord);
@@ -1081,6 +1162,13 @@ public class GUIController implements Initializable {
 			pronounce(vocabula);
 			updateQueryBoxText(vocabula.headWord, false);
 		}
+	}
+
+	private boolean newTabAccteptable(Vocabula vocabula, Tab currentTab) {
+		return commandCtrl || tabPane.getTabs().size() == 1 || (currentTab instanceof TranslationTab)
+				       || (!tabPane.trySelectTab(ExpositorTab.sameTab(vocabula.headWord))
+						           && !(currentTab instanceof ExpositorTab
+								                || tabPane.trySelectTab(tab -> tab instanceof ExpositorTab)));
 	}
 
 	private void appendRequestHistory(String query) {
@@ -1128,28 +1216,29 @@ public class GUIController implements Initializable {
 	}
 
 	private Collection<String> findReferences(String pattern, boolean isRegex) {
-		Function<String, Collection<String>> referencesFinder = pat -> indexer.getReferencesFinder().apply(pat, isRegex);
+		Function<String, Collection<String>> referencesFinder = pattrn -> indexer.getReferencesFinder().apply(pattrn, isRegex);
 		return isRegex
 				       ? referencesFinder.apply(pattern)
 				       : referencesCache.computeIfAbsent(pattern, referencesFinder);
 	}
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-	private void deleteHeadword(Optional<String> selection) {
-		Collection<String> headwords = selection
-				                               .map(s -> Stream.of(s.split("[\\n\\r\\f]"))
-						                                         .filter(Strings::notBlank)
-						                                         .collect(toList()))
-				                               .orElse(selectedHWItems).stream()
-				                               .collect(toList());
-		int count = headwords.size();
-		if (count == 0) return;
-		Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, getDeleteMsg(count), ButtonType.YES, ButtonType.NO);
+//	private void deleteHeadwords(Optional<String> selection) {
+	private void deleteHeadwords() {
+		Collection<String> headwords = new ArrayList<>();
+		if (tabPane.getSelectedTabIndex() == 0) {
+			headwords.addAll(selectedHWItems);
+		} else if (tabPane.getActiveTab() instanceof ExpositorTab) {
+			String activeViewHeadword = getActiveViewHeadword();
+			if (!activeViewHeadword.isEmpty()) headwords.add(activeViewHeadword);
+		}
+		if (headwords.isEmpty()) return;
+		Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, getDeleteMsg(headwords.size()), ButtonType.YES, ButtonType.NO);
 		GUIUtil.hackAlert(confirm);
 		confirm.showAndWait().filter(response -> response == ButtonType.YES).ifPresent(response -> {
 			if (tabPane.getSelectedTabIndex() > 0 && headwords.contains(tabPane.getActiveTab().getText()))
 				tabPane.removeActiveTab();
-			getDeletionTask(headwords).run();
+			Platform.runLater(getDeletionTask(headwords));
 		});
 	}
 
@@ -1161,6 +1250,7 @@ public class GUIController implements Initializable {
 						                       .map(String::trim)
 						                       .filter(headword -> dictionary.removeVocabula(headword))
 						                       .collect(toList());
+				LOGGER.debug("deleted entries: {}", deleted);
 				if (!deleted.isEmpty()) {
 					saveDictionary();
 					hwData.removeAll(deleted);
@@ -1198,29 +1288,32 @@ public class GUIController implements Initializable {
 	}
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
-	private void pronounce(Optional<String> selection, boolean isArticle) {
-		pronouncingService.clearQueue();
-		if (!isArticle) {
-			pronounce(selection);
-			return;
-		}
-		selection.ifPresent(s -> {
-			Optional<Vocabula> optVocabula = dictionary.findVocabula(s);
-			pronouncingService.clearQueue();
-			optVocabula.ifPresent(vocabula -> {
-				Platform.runLater(() -> pronouncingService.enqueueAsync(vocabula.toString().replaceAll("[<>]", "")));
+	private void pronounce(Optional<String> text, boolean isArticle) {
+		if (isArticle && text.isPresent()) {
+			dictionary.findVocabula(text.get())
+					.ifPresent(vocabula -> Platform.runLater(() -> {
+						pronouncingService.clearQueue();
+						pronouncingService.enqueueAsync(vocabula.toString().replaceAll("[<>]", ""));
+					}));
+		} else {
+			Platform.runLater(() -> {
+				pronouncingService.clearQueue();
+				Supplier<String> contextProvider = () -> {
+					String selectedText = getSelectedText();
+					return selectedText.isEmpty() ? getActiveViewHeadword() : selectedText;
+				};
+				pronouncingService.enqueueAsync(text.orElse(contextProvider.get()), PRONUNCIATION_DELAY);
 			});
-		});
+		}
 	}
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 	private void pronounce(Optional<String> selection) {
-		pronouncingService.clearQueue();
-		Platform.runLater(() -> {
-			pronouncingService.clearQueue();
-			pronouncingService.enqueueAsync(selection.orElse(selectedHWItems.stream().collect(joining("\n"))),
-			                                PRONUNCIATION_DELAY);
-		});
+		pronounce(selection, false);
+	}
+
+	private String getActiveViewHeadword() {
+		return getAssignedVocabula(tabPane.getActiveTab()).map(voc -> voc.headWord).orElse("");
 	}
 
 	private void pronounce(Vocabula vocabula) {
@@ -1236,7 +1329,7 @@ public class GUIController implements Initializable {
 	}
 
 	private void render(Collection<Vocabula> vocabulas, String... textsToHighlight) {
-		LOGGER.debug("rendering {} with highlight {}",
+		LOGGER.debug("rendering [{}] with highlight [{}]",
 		             com.nicedev.util.Collections.toString(vocabulas, v -> v.headWord), Arrays.toString(textsToHighlight));
 		if (vocabulas.isEmpty()) {
 			tabPane.getActiveEngine().ifPresent(engine -> engine.loadContent(""));
@@ -1255,7 +1348,6 @@ public class GUIController implements Initializable {
 			}
 			bodyContent = highlight(bodyContent, textsToHighlight);
 			bodyContent = injectAnchors(bodyContent);
-			LOGGER.debug("body content:\n{}", bodyContent);
 			String htmlContent = String.format(contentFmt, cssHref, jsHref, bodyContent);
 			LOGGER.debug("resulting content:\n{}", htmlContent);
 			engine.loadContent(htmlContent);

@@ -4,22 +4,21 @@ import javafx.concurrent.ScheduledService;
 import javafx.concurrent.Task;
 import javafx.util.Duration;
 
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 public class DelayedTaskService<R> extends ScheduledService<R> {
-	private String filter = "";
 
-	private final Function<String, Task<R>> taskProvider;
+	private Supplier<Task<R>> taskSupplier;
 	private int delay;
 
-	public DelayedTaskService(Function<String, Task<R>> delayedTaskProvider, int delay) {
-		taskProvider = delayedTaskProvider;
+	public DelayedTaskService(Supplier<Task<R>> delayedTaskProvider, int delay) {
+		taskSupplier = delayedTaskProvider;
 		this.delay = delay;
 	}
 
 	@Override
 	protected Task<R> createTask() {
-		Task<R> task = taskProvider.apply(filter);
+		Task<R> task = taskSupplier.get();
 		setDelay(Duration.millis(delay));
 		return task;
 	}
@@ -30,15 +29,13 @@ public class DelayedTaskService<R> extends ScheduledService<R> {
 		cancel();
 	}
 
-	public void setFilter(String newFilter) {
-		filter = newFilter;
-		restart();
+	void setTaskSupplier(Supplier<Task<R>> taskSupplier) {
+		this.taskSupplier = taskSupplier;
 	}
 
 	public void setDelay(int newDelay) {
 		delay = newDelay;
 		setDelay(Duration.millis(delay));
 	}
-
 
 }
