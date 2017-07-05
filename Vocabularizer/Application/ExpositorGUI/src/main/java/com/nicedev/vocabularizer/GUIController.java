@@ -1000,7 +1000,7 @@ public class GUIController implements Initializable {
 				text = selectedHWItems.stream().sorted().collect(joining("\n"));
 			}
 		} else {
-			text = textToTranslate.map(t -> t.replaceAll("\\t+| {2,}", " ")).orElse(getActiveViewHeadword());
+			text = textToTranslate.map(t -> t.replaceAll("\\t+| {2,}", " ")).orElse(getActiveTabHeadword());
 		}
 		if (!text.isEmpty()) {
 			String translationURL = requestFormatter.apply(encodeURL(text));
@@ -1088,12 +1088,9 @@ public class GUIController implements Initializable {
 								LOGGER.debug("among suggested found present: \"{}\"", suggested);
 								dictionary.findVocabula(suggested).ifPresent(vocabula -> showResponse(vocabula, fQuery));
 							} else {
-								showTranslation = true;
+								tabPane.selectTab(mainTab);
 							}
 						} else if (!showReferencingVocabula(fQuery)) {
-							showTranslation = true;
-						}
-						if (showTranslation) {
 							Platform.runLater(() -> showTranslation(Optional.of(fQuery), requestFormatterGT));
 						}
 					}
@@ -1236,14 +1233,14 @@ public class GUIController implements Initializable {
 		if (tabPane.getSelectedTabIndex() == 0) {
 			headwords.addAll(selectedHWItems);
 		} else if (tabPane.getActiveTab() instanceof ExpositorTab) {
-			String activeViewHeadword = getActiveViewHeadword();
+			String activeViewHeadword = getActiveTabHeadword();
 			if (!activeViewHeadword.isEmpty()) headwords.add(activeViewHeadword);
 		}
 		if (headwords.isEmpty()) return;
 		Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, getDeleteMsg(headwords.size()), ButtonType.YES, ButtonType.NO);
 		GUIUtil.hackAlert(confirm);
 		confirm.showAndWait().filter(response -> response == ButtonType.YES).ifPresent(response -> {
-			if (tabPane.getSelectedTabIndex() > 0 && headwords.contains(tabPane.getActiveTab().getText()))
+			if (tabPane.getSelectedTabIndex() > 0 && headwords.contains(getActiveTabHeadword()))
 				tabPane.removeActiveTab();
 			Platform.runLater(getDeletionTask(headwords));
 		});
@@ -1253,17 +1250,18 @@ public class GUIController implements Initializable {
 		return new Task<Void>() {
 			@Override
 			protected Void call() throws Exception {
-				List<String> deleted = headwords.stream()
+				List<String> available = headwords.stream()
 						                       .map(String::trim)
-						                       .filter(headword -> dictionary.removeVocabula(headword))
+						                       .filter(headword -> dictionary.containsVocabula(headword))
 						                       .collect(toList());
-				LOGGER.debug("deleted entries: {}", deleted);
-				if (!deleted.isEmpty()) {
+				LOGGER.debug("deleted entries: {}", available);
+				if (!available.isEmpty()) {
+					hwData.removeAll(available);
+					updateTableState(false);
+					available.forEach(dictionary::removeVocabula);
 					saveDictionary();
-					hwData.removeAll(deleted);
 					updateStatistics(true);
 					if (tabPane.getTabs().size() == 1) updateQueryBoxText(queryBoxValue.getValue(), true);
-					updateTableState(false);
 				}
 				return null;
 			}
@@ -1307,7 +1305,7 @@ public class GUIController implements Initializable {
 				pronouncingService.clearQueue();
 				Supplier<String> contextProvider = () -> {
 					String selectedText = getSelectedText();
-					return selectedText.isEmpty() ? getActiveViewHeadword() : selectedText;
+					return selectedText.isEmpty() ? getActiveTabHeadword() : selectedText;
 				};
 				pronouncingService.enqueueAsync(text.orElse(contextProvider.get()), PRONUNCIATION_DELAY);
 			});
@@ -1319,7 +1317,7 @@ public class GUIController implements Initializable {
 		pronounce(selection, false);
 	}
 
-	private String getActiveViewHeadword() {
+	private String getActiveTabHeadword() {
 		return getAssignedVocabula(tabPane.getActiveTab()).map(voc -> voc.headWord).orElse("");
 	}
 
