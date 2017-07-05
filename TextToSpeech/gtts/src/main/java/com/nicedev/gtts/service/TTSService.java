@@ -19,7 +19,6 @@ public abstract class TTSService extends Thread {
 	final static private String[] accents = { "GB", "US" };
 	private static final int LENGTH_THRESHOLD = 167; // below that length of text resulting audio ends with relatively long silence
 	final boolean showProgress;
-	private final CachingAgent cachingAgent;
 	volatile boolean isStopping = false;
 	final TTSRequestProxy requestProxy;
 	private AsyncAppender appender = new AsyncAppender();
@@ -35,20 +34,20 @@ public abstract class TTSService extends Thread {
 	private Map<Character, Integer> delays;
 
 
-	TTSService(int cacheSize, boolean showProgress) {
-		final int CACHE_SIZE = (cacheSize > 1 && cacheSize <= 10) ? cacheSize : DEFAULT_CACHE_SIZE;
+	TTSService(int prefetchQueueSize, boolean showProgress) {
+		final int QUEUE_SIZE = (prefetchQueueSize > 1 && prefetchQueueSize <= 10) ? prefetchQueueSize : DEFAULT_CACHE_SIZE;
 		this.showProgress = showProgress;
 		requestProxy = TTSRequestProxy.getInstance();
 		cache = Collections.synchronizedMap(new LinkedHashMap<>());
 		inputQueue = new ArrayBlockingQueue<>(100);
-		outputQueue = new ArrayBlockingQueue<>(CACHE_SIZE);
-		executor = Executors.newFixedThreadPool(CACHE_SIZE);
-		cachingAgent = new CachingAgent();
+		outputQueue = new ArrayBlockingQueue<>(QUEUE_SIZE);
+		executor = Executors.newFixedThreadPool(QUEUE_SIZE);
+		new CachingAgent().start();
 		delays = new HashMap<>();
 	}
 
-	public TTSService(int cacheSize) {
-		this(cacheSize, false);
+	public TTSService(int prefetchQueueSize) {
+		this(prefetchQueueSize, false);
 	}
 
 	public void enqueueAsync(String wordsToPronounce) {
@@ -196,7 +195,6 @@ public abstract class TTSService extends Thread {
 		CachingAgent() {
 			setName("Cacher");
 			setDaemon(true);
-			start();
 		}
 
 		public void run() {
@@ -210,7 +208,7 @@ public abstract class TTSService extends Thread {
 					String data = ttsData.toString();
 					LOGGER.debug("caching: {}[{}]",
 					             data.length() > 15 ? data.substring(0,  15) : data, data.length());
-					if (overloadAccent) ttsData = new TTSData(ttsData.pronunciationSource,
+					if (overloadAccent) ttsData = new TTSData(ttsData.audioSource,
 					                                          getActualAccent(),
 					                                          ttsData.delayAfter,
 					                                          ttsData.limitPercent);

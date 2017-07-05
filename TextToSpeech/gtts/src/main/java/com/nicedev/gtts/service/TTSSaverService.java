@@ -87,7 +87,6 @@ public class TTSSaverService extends TTSService {
 		} finally {
 			shutdown();
 		}
-
 	}
 
 	@Override

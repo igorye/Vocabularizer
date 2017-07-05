@@ -18,12 +18,10 @@ public class TTSPlaybackService extends TTSService {
 
 	private StoppableAudioPlayer activePlayer = new AudioController();
 	private volatile boolean invalidateCache = false;
-	private boolean showProgress;
 
 
 	public TTSPlaybackService(int cacheSize, boolean showProgress) {
 		super(cacheSize, showProgress);
-		this.showProgress = showProgress;
 		cache = Collections.synchronizedMap(new LinkedHashMap<>());
 		inputQueue = new ArrayBlockingQueue<>(100);
 		outputQueue = new ArrayBlockingQueue<>(cacheSize);
@@ -44,7 +42,7 @@ public class TTSPlaybackService extends TTSService {
 				if (invalidateCache) {
 					Thread.yield();
 				} else {
-					if (ttsData.pronunciationSource.contains("://"))
+					if (ttsData.audioSource.contains("://"))
 						playURL(ttsData);
 					else
 						playGTTS(ttsData);
@@ -100,7 +98,7 @@ public class TTSPlaybackService extends TTSService {
 			}
 			Thread.sleep(ttsData.delayAfter);
 		} catch (JavaLayerException | IOException | NullPointerException e) {
-			LOGGER.info("Error has occurred trying play {}%n", ttsData.pronunciationSource);
+			LOGGER.info("Error has occurred trying play {}%n", ttsData.audioSource);
 		} catch (InterruptedException e) {
 			LOGGER.info("GTTS isStopping");
 		} catch (ExecutionException e) {

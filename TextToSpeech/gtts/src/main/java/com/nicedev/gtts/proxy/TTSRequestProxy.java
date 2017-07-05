@@ -30,7 +30,7 @@ public class TTSRequestProxy extends GoogleRequestProxy {
 		String data = ttsData.toString();
 		LOGGER.debug("TTS request: {}[{}]",
 		             data.length() > 15 ? data.substring(0, 15) : data, data.length());
-		String request = ttsData.pronunciationSource;
+		String request = ttsData.audioSource;
 		boolean isTTSConnection = false;
 		try {
 			if (!request.contains("://"))
