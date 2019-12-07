@@ -1,9 +1,12 @@
 package com.nicedev.vocabularizer.dictionary.parser;
 
-import com.nicedev.vocabularizer.dictionary.model.*;
 import com.nicedev.util.Exceptions;
 import com.nicedev.util.Html;
 import com.nicedev.util.Strings;
+import com.nicedev.vocabularizer.dictionary.model.Definition;
+import com.nicedev.vocabularizer.dictionary.model.Language;
+import com.nicedev.vocabularizer.dictionary.model.PartOfSpeech;
+import com.nicedev.vocabularizer.dictionary.model.Vocabula;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
@@ -21,10 +24,10 @@ import javax.xml.xpath.XPathFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
 import java.lang.invoke.MethodHandles;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -85,14 +88,8 @@ public class MerriamWebsterParser {
 	public Set<Vocabula> getVocabula(String entry, boolean acceptSimilar) {
 		Optional<String> encodedEntry;
 		recentQuerySuggestions.clear();
-		try {
-			String filteredEntry = String.join(" ", entry.split("[\\\\/?&]")).replaceAll("\\s{2,}", " ").trim();
-			encodedEntry = Optional.of(URLEncoder.encode(filteredEntry, "UTF-8"));
-		} catch (UnsupportedEncodingException e) {
-			encodedEntry = Optional.empty();
-			LOGGER.error("Error occured while retrieving [{}]. Unable to generate request ({} {}).", entry, e.getMessage(),
-			             e.getCause());
-		}
+		String filteredEntry = String.join(" ", entry.split("[\\\\/?&]")).replaceAll("\\s{2,}", " ").trim();
+		encodedEntry = Optional.of(URLEncoder.encode(filteredEntry, StandardCharsets.UTF_8));
 		String request = String.format(expositorRequestFmt, encodedEntry.orElse(entry), key);
 		try {
 			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
@@ -239,7 +236,7 @@ public class MerriamWebsterParser {
 
 	@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 	private boolean isNewVocabulaProceeding(Optional<Vocabula> optNewVocabula, SearchResult headWordSR) {
-		return !optNewVocabula.isPresent() || optNewVocabula.filter(
+		return optNewVocabula.isEmpty() || optNewVocabula.filter(
 				nV -> !nV.headWord.equals(headWordSR.entry)).isPresent();
 	}
 
@@ -284,7 +281,7 @@ public class MerriamWebsterParser {
 				if (!hasDefinition(sr1.foundAt) && hasDefinition(sr2.foundAt)) return 1;
 				return sr1.compareTo(sr2);
 			};
-			Optional<SearchResult> entrySR = similarsSR.stream().sorted(hasDefinitionFirst).findFirst();
+			Optional<SearchResult> entrySR = similarsSR.stream().min(hasDefinitionFirst);
 			entrySR.ifPresent(entriesSR::add);
 		}
 		return entriesSR;

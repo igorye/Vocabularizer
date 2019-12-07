@@ -4,7 +4,6 @@ package com.nicedev.vocabularizer.dictionary.model;
 import com.nicedev.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.profiler.Profiler;
 
 import java.io.*;
 import java.lang.invoke.MethodHandles;
@@ -23,20 +22,16 @@ public class Dictionary implements Serializable {
 	private static final long serialVersionUID = -1507438212189317827L;
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
-	private static final Profiler profiler = new Profiler("Dictionary");
-	static {
-		profiler.setLogger(LOGGER);
-	}
 
 	final public Language language;
 
 	final private Map<String, Vocabula> articles;
-	final private Map<Integer, Vocabula> index;
+//	final private Map<Integer, Vocabula> index;
 	private int definitionsCount;
 	private int vocabulasCount;
 	private static final String CACHE_INVALID = "[I_N_V_A_L_I_D]";
 	transient private String cachedRequest;
-	transient private Optional<Vocabula> optCachedResponse;
+	transient private Optional<Vocabula> optCachedResponse = Optional.empty();
 	transient private boolean invalidateStatistics = true;
 //  private Locale locale;
 
@@ -44,11 +39,12 @@ public class Dictionary implements Serializable {
 	public Dictionary(String lang) {
 		this.language = new Language(lang);
 		articles = new HashMap<>();
-		index = new TreeMap<>();
+//		index = new TreeMap<>();
 //      locale = new Locale(language.langName.toLowerCase());
 	}
 
 	public static Optional<Dictionary> load(String langName, String path) {
+		LOGGER.debug("Loading {}", path);
 		Dictionary dictionary = null;
 		try (ObjectInput in = new ObjectInputStream(new GZIPInputStream(new FileInputStream(path), 1024 * 1024))) {
 			dictionary = (Dictionary) in.readObject();
@@ -219,7 +215,6 @@ public class Dictionary implements Serializable {
 	}*/
 
 	public String explainVocabulas(String regex) {
-		profiler.start("explainVocabulas(stringBuilder)");
 		StringBuilder res = new StringBuilder();
 		if (getVocabulasCount() != 0) {
 			Collection<String> candidates = filterHeadwords(regex, true);
@@ -233,13 +228,11 @@ public class Dictionary implements Serializable {
 						.forEach(voc -> res.append(voc).append("\n"));
 			}
 		}
-		profiler.stop().log();
 		return res.toString();
 	}
 
 	public Collection<String> filterHeadwords(String regex, boolean sorted) {
 		if (articles.isEmpty()) return Collections.emptyList();
-		profiler.start("filterHeadwords");
 		Stream<String> matched;
 		if (regex.isEmpty() || regex.trim().matches("\\(\\?[idmsux-]+\\)")) {
 			matched = articles.keySet().stream();
@@ -249,9 +242,7 @@ public class Dictionary implements Serializable {
 					          .filter(hw -> hw.contains(regex) || hw.matches(validatedRegex));
 		}
 		if (sorted) matched = matched.sorted();
-		List<String> filtered = matched.collect(toList());
-		profiler.stop().log();
-		return filtered;
+		return matched.collect(toList());
 	}
 
 /*
@@ -290,14 +281,11 @@ public class Dictionary implements Serializable {
 
 	public Collection<Vocabula> getVocabulas(Collection<String> headwords) {
 		if (headwords.isEmpty()) return Collections.emptySet();
-		profiler.start("getVocabulas");
 		if (getVocabulasCount() != 0) {
-			List<Vocabula> vocabulas = headwords.stream()
-					                           .map(articles::get)
-					                           .filter(Objects::nonNull)
-					                           .collect(toList());
-			profiler.stop().log();
-			return vocabulas;
+			return headwords.stream()
+							.map(articles::get)
+							.filter(Objects::nonNull)
+							.collect(toList());
 		}
 		return Collections.emptyList();
 	}
@@ -336,8 +324,8 @@ public class Dictionary implements Serializable {
 	public Collection<Definition> getDefinitions(String entry, String partOfSpeechName) {
 		Vocabula vocabula = articles.get(entry);
 		return vocabula == null
-				       ? vocabula.getDefinitions(language.getPartOfSpeech(partOfSpeechName))
-				       : Collections.emptyList();
+					   ? Collections.emptyList()
+					   : vocabula.getDefinitions(language.getPartOfSpeech(partOfSpeechName));
 	}
 
 	public boolean containsVocabula(String headword) {
@@ -351,31 +339,27 @@ public class Dictionary implements Serializable {
 	public Optional<Vocabula> findVocabula(String headword) {
 		if (headword.isEmpty()) return Optional.empty();
 		if (isCached(headword)) return optCachedResponse;
-		profiler.start("findVocabula");
 		optCachedResponse = Optional.ofNullable(articles.get(headword));
-		if (!optCachedResponse.isPresent()) {
+		if (optCachedResponse.isEmpty()) {
 			String regex = "(?i)".concat(Strings.escapeSymbols(headword, "[()]"));
 			List<String> candidates = articles.keySet().stream()
 					                          .filter(s -> s.matches(regex))
-					                          .filter(s -> headword.substring(1, headword.length()).equals(s.substring(1, s.length())))
+					                          .filter(s -> headword.substring(1).equals(s.substring(1)))
 					                          .collect(toList());
 			optCachedResponse = (Character.isUpperCase(headword.charAt(0)) && candidates.size() == 1)
 					                    ? Optional.ofNullable(articles.get(candidates.get(0)))
 					                    : Optional.empty();
 		}
 		cachedRequest = headword;
-		profiler.stop().log();
 		return optCachedResponse;
 	}
 
 	public Collection<Vocabula> filterVocabulas(String regex) {
-		profiler.start("filterVocabulas()");
 		if (getVocabulasCount() != 0) {
 			return filterHeadwords(regex, false).stream()
 					       .map(articles::get)
 					       .collect(toList());
 		}
-		profiler.stop().log();
 		return Collections.emptyList();
 	}
 

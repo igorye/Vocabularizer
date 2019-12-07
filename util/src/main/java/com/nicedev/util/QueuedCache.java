@@ -32,7 +32,7 @@ public class QueuedCache<K, V> implements Map<K, V>{
 		if (size < cacheMap.size()) cacheQueue.offer(key);
 		if (cacheQueue.size() > capacity) {
 			K oldest = cacheQueue.poll();
-			if (!oldest.equals(persistentKey) && !oldest.equals(key)) cacheMap.remove(oldest);
+			if (!persistentKey.equals(oldest) && !key.equals(oldest)) cacheMap.remove(oldest);
 		}
 		return value;
 	}
@@ -55,7 +55,7 @@ public class QueuedCache<K, V> implements Map<K, V>{
 
 	@Override
 	public void putAll(Map<? extends K, ? extends V> m) {
-		m.forEach((k, v) -> put(k, v));
+		m.forEach(this::put);
 	}
 
 	public void clear() {

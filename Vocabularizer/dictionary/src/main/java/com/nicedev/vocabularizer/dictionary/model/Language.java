@@ -48,9 +48,10 @@ public class Language implements Serializable, Comparable {
 	private void repairPoS() {
 		final String USER_HOME = System.getProperties().getProperty("user.home");
 		final String PROJECT_HOME = System.getProperties().getProperty("Vocabularizer.home", USER_HOME + "\\vocabularizer");
+		final String CONF_PATH = PROJECT_HOME.concat("\\conf");
 		Properties langProps = new Properties();
 		Map<String, PartOfSpeech> partsOS = new TreeMap<>();
-		try (InputStream in = new FileInputStream(new File(PROJECT_HOME, String.format("%s.properties", langName)))) {
+		try (InputStream in = new FileInputStream(new File(CONF_PATH, String.format("%s.properties", langName)))) {
 			langProps.loadFromXML(in);
 			int nPoS = 0;
 			String PoSName;
@@ -65,24 +66,20 @@ public class Language implements Serializable, Comparable {
 			partsOS.put(PartOfSpeech.COMPOSITE, new PartOfSpeech(this, PartOfSpeech.COMPOSITE));
 		} catch (IOException e) {
 			LOGGER.error("Unable to read language configuration. {}.properties file is corrupt or missing at" +
-					                  " {}. \n", langName, PROJECT_HOME);
+					                  " {}. \n", langName, CONF_PATH);
 		}
 		final int[] i = { 1 };
 		partsOS.keySet().forEach(p -> langProps.put(String.format("name%d", i[0]++), p));
-		try (OutputStream out = new FileOutputStream(new File(PROJECT_HOME, String.format("%s.properties", langName)))) {
+		try (OutputStream out = new FileOutputStream(new File(CONF_PATH, String.format("%s.properties", langName)))) {
 			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
 		} catch (IOException e) {
-			LOGGER.error("Unable to write language configuration to {}\\{}.properties",
-			             PROJECT_HOME, langName);
+			LOGGER.error("Unable to write language configuration to {}\\\\{}.properties",
+			             CONF_PATH, langName);
 		}
 	}
 
-	public Language(String langName, String shortName) {
-		this(langName, shortName, langs.get(langName).alphabet);
-	}
-
 	public Language(String langName) {
-		this(langName, langName.substring(0, 3), langs.get(langName).alphabet);
+		this(langName, langName.substring(0, 2), langs.get(langName).alphabet);
 	}
 
 	public static boolean charsMatchLanguage(String src, Language lang) {
@@ -129,7 +126,8 @@ public class Language implements Serializable, Comparable {
 		Map<String, PartOfSpeech> partsOS = new TreeMap<>();
 		String userHome = System.getProperties().getProperty("user.home");
 		String projectHome = System.getProperties().getProperty("Vocabularizer.home", userHome + "\\vocabularizer");
-		try (InputStream in = new FileInputStream(new File(projectHome, String.format("%s.properties", langName)))) {
+		String confPath = projectHome.concat("\\conf");
+		try (InputStream in = new FileInputStream(new File(confPath, String.format("%s.properties", langName)))) {
 			langProps.loadFromXML(in);
 			int nPoS = 0;
 			String PoSName;
@@ -142,7 +140,7 @@ public class Language implements Serializable, Comparable {
 			partsOS.put(PartOfSpeech.COMPOSITE, new PartOfSpeech(this, PartOfSpeech.COMPOSITE));
 		} catch (IOException e) {
 			LOGGER.error("Unable to read language configuration. {}.properties file is corrupt or missing at {}",
-			             langName, projectHome);
+			             langName, confPath);
 		}
 		LOGGER.debug("Loaded partsOfSpeech[{}]", partsOS.size());
 		return partsOS;
@@ -157,17 +155,18 @@ public class Language implements Serializable, Comparable {
 		}
 		String userHome = System.getProperties().getProperty("user.home");
 		String projectHome = System.getProperties().getProperty("Vocabularizer.home", userHome + "\\vocabularizer");
-		Path dir = Paths.get(projectHome).toAbsolutePath().getParent();
+		String confPath = projectHome.concat("\\conf");
+		Path dir = Paths.get(confPath).toAbsolutePath().getParent();
 		if (!Files.exists(dir))
 			try {
 				Files.createDirectories(dir);
 			} catch (IOException e) {
-				projectHome = userHome;
+				confPath = userHome.concat("\\conf");
 			}
-		try (OutputStream out = new FileOutputStream(new File(projectHome, String.format("%s.properties", langName)))) {
+		try (OutputStream out = new FileOutputStream(new File(confPath, String.format("%s.properties", langName)))) {
 			langProps.storeToXML(out, String.format("%s language parts of speech", langName));
 		} catch (IOException e) {
-			LOGGER.error("Unable to write language configuration to {}\\{}.properties", projectHome, langName);
+			LOGGER.error("Unable to write language configuration to {}\\\\{}.properties", confPath, langName);
 		}
 	}
 

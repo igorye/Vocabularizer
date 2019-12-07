@@ -1,6 +1,5 @@
 package com.nicedev.vocabularizer;
 
-import com.nicedev.util.Exceptions;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -18,7 +17,7 @@ public class ExpositorGUI extends Application {
 	}
 
 	@Override
-	public void start(Stage primaryStage) throws Exception {
+	public void start(Stage primaryStage) {
 		try {
 			URL resource = getClass().getProtectionDomain().getClassLoader().getResource("tableView.fxml");
 			FXMLLoader fxmlLoader = new FXMLLoader(resource);
@@ -28,11 +27,10 @@ public class ExpositorGUI extends Application {
 			controller.setMainScene(scene);
 			primaryStage.setTitle("Vocabularizer");
 			primaryStage.setScene(scene);
-			primaryStage.setOnShown(event -> controller.onLoad());
+			primaryStage.setOnShown(controller::onStageShown);
 			primaryStage.show();
 		} catch (Exception e) {
-			GUIController.LOGGER.error("Exception has occured: {}\n{}", e,
-			                           Exceptions.getPackageStackTrace(e, GUIController.BASE_PACKAGE));
+			GUIController.LOGGER.error("Exception has occurred:", e);
 		}
 
 	}

@@ -124,14 +124,12 @@ public class Vocabula implements Serializable, Comparable {
 	public Set<Definition> getDefinitions(PartOfSpeech partOfSpeech) {
 		if (partOfSpeech == null) return Collections.emptySet();
 		Set<Definition> defs;
-		switch (partOfSpeech.partName) {
-			case PartOfSpeech.ANY:
-				defs = mapPOS.keySet().stream()
-						       .map(this::getDefinitions)
-						       .collect(LinkedHashSet::new, Set::addAll, Set::addAll);
-				break;
-			default:
-				defs = mapPOS.getOrDefault(partOfSpeech, Collections.emptySet());
+		if (PartOfSpeech.ANY.equals(partOfSpeech.partName)) {
+			defs = mapPOS.keySet().stream()
+						 .map(this::getDefinitions)
+						 .collect(LinkedHashSet::new, Set::addAll, Set::addAll);
+		} else {
+			defs = mapPOS.getOrDefault(partOfSpeech, Collections.emptySet());
 		}
 		return Collections.unmodifiableSet(defs);
 	}
@@ -206,7 +204,7 @@ public class Vocabula implements Serializable, Comparable {
 			Collection<String> forms = getKnownForms(partOfSpeech);
 			if (!forms.isEmpty())
 				res.append(format("   form%s: ", forms.size() > 1 ? "s" : ""))
-						.append(forms.stream().collect(joining(", "))).append("\n");
+				   .append(String.join(", ", forms)).append("\n");
 			getDefinitions(partOfSpeech).forEach(res::append);
 		});
 		return res.toString();
@@ -223,7 +221,7 @@ public class Vocabula implements Serializable, Comparable {
 			Collection<String> forms = getKnownForms(partOfSpeech);
 			if (!forms.isEmpty())
 				res.append(format("<div>form%s: ", forms.size() > 1 ? "s" : ""))
-						.append("<b>").append(forms.stream().collect(joining("</b>, <b>"))).append("</b></div>\n");
+				   .append("<b>").append(String.join("</b>, <b>", forms)).append("</b></div>\n");
 			getDefinitions(partOfSpeech).forEach(definition -> res.append(definition.toHTML()));
 			res.append("</div>");
 		});
