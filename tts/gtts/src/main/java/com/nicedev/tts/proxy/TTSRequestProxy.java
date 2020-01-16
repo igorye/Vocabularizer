@@ -7,8 +7,6 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -31,12 +29,10 @@ public class TTSRequestProxy extends GoogleRequestProxy {
 		String data = ttsData.toString();
 		LOGGER.debug("TTS request: {}[{}]",
 		             data.length() > 15 ? data.substring(0, 15) : data, data.length());
-		String request = ttsData.audioSource;
+		String request = ttsData.textToSpeak;
 		boolean isTTSConnection = false;
 		if (!request.contains("://"))
-			request = String.format(TTS_REQUEST_FMT.format, nextHost(), URLEncoder.encode(request,
-																						  StandardCharsets.UTF_8),
-									ttsData.accent, request.length(), request.length());
+			request = TTS_REQUEST.encode(nextHost(), request, ttsData.accent, request.length());
 		HttpURLConnection conn = null;
 		try {
 			conn = getRequestConnection(request);

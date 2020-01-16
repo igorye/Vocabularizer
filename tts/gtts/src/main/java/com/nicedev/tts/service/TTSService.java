@@ -32,19 +32,27 @@ public abstract class TTSService extends Thread {
 	private       int                     accent         = 0;
 	private       boolean                 awaitInput     = true;
 	private final ExecutorService         executor;
-	private       Map<Character, Integer> delays;
+	private       Map<Character, Integer> delays = new HashMap<>();
 
+	{
+		setDelay('.', 300)
+				.setDelay(':', 100)
+				.setDelay(';', 100)
+				.setDelay(',', 0)
+				.setDelay('-', 100);
+	}
 
 	TTSService(int prefetchQueueSize, boolean showProgress) {
-		final int QUEUE_SIZE = (prefetchQueueSize > 1 && prefetchQueueSize <= 10) ? prefetchQueueSize : DEFAULT_CACHE_SIZE;
+		final int QUEUE_SIZE = (prefetchQueueSize > 1 && prefetchQueueSize <= 10)
+									   ? prefetchQueueSize
+									   : DEFAULT_CACHE_SIZE;
 		this.showProgress = showProgress;
 		requestProxy = TTSRequestProxy.getInstance();
-		cache = Collections.synchronizedMap(new LinkedHashMap<>());
+		cache = new ConcurrentHashMap<>();
 		inputQueue = new ArrayBlockingQueue<>(100);
 		outputQueue = new ArrayBlockingQueue<>(QUEUE_SIZE);
 		executor = Executors.newFixedThreadPool(QUEUE_SIZE);
 		new CachingAgent().start();
-		delays = new HashMap<>();
 	}
 
 	public TTSService(int prefetchQueueSize) {
@@ -68,9 +76,10 @@ public abstract class TTSService extends Thread {
 		try {
 			validateCache();
 			String accent = text.contains("://") ? null : getActualAccent();
+			LOGGER.debug("Actual accent is '{}'", accent);
 			for (String words : split(text, "\n", 0)) {
 				if (isInterrupted()) break;
-				int limitPercent = words.length() <= LENGTH_THRESHOLD ? 98 : 95;
+				int limitPercent = words.length() >= LENGTH_THRESHOLD ? 98 : 95;
 				LOGGER.debug("Enqueuing: {}", words);
 				inputQueue.put(new TTSData(words, accent, getDelay(words, delay), limitPercent));
 			}
@@ -81,13 +90,15 @@ public abstract class TTSService extends Thread {
 
 	private static Collection<String> split(String line, String splitter, int nextRule) {
 		String[] splitRules = { "(?<=\\\\.{2,3} )",
-		                        "(?=\\()",
-		                        "(?<=\\)[,:;]{0,1})",
+								"(?<=[.] )",
+								"(?=\\()",
+								"(?<=\\)[,:;]{0,1})",
 								"(?> '\\w+' )",
-		                        "(?> \"\\w+\" )",
-		                        "(?<=[,:;])",
-		                        "(?= - )",
-		                        "\\s" };
+								"(?> \"\\w+\" )",
+								"(?<=[:;])",
+								"(?<=[,:;])",
+								"(?= - )",
+								"\\s" };
 		List<String> res = new ArrayList<>();
 		for (String token : line.split(splitter)) {
 			if (token.length() <= 200 || token.contains("://")) {
@@ -167,7 +178,7 @@ public abstract class TTSService extends Thread {
 		isLimited = true;
 		isStopping = executionLimit.get() == 0;
 		LOGGER.debug("releasing in {} cycles. isStopping = {}, inputQueue[{}], outputQueue[{}]",
-		             cyclesBeforeRelease, isStopping, inputQueue.size(), outputQueue.size());
+					 cyclesBeforeRelease, isStopping, inputQueue.size(), outputQueue.size());
 		if (isStopping || outputQueue.isEmpty() && inputQueue.isEmpty()) interrupt();
 	}
 
@@ -207,12 +218,11 @@ public abstract class TTSService extends Thread {
 						LOGGER.debug("awaiting ttsData");
 					ttsData = inputQueue.take();
 					String data = ttsData.toString();
-					LOGGER.debug("caching: {}[{}]",
-					             data.length() > 15 ? data.substring(0,  15) : data, data.length());
-					if (overloadAccent) ttsData = new TTSData(ttsData.audioSource,
-					                                          getActualAccent(),
-					                                          ttsData.delayAfter,
-					                                          ttsData.limitPercent);
+					LOGGER.debug("caching: {}[{}]", data, data.length());
+					if (overloadAccent) ttsData = new TTSData(ttsData.textToSpeak,
+															  getActualAccent(),
+															  ttsData.delayAfter,
+															  ttsData.limitPercent);
 					TTSData fTTSData = ttsData;
 					Future<byte[]> cacheTask = executor.submit(() -> getTTSBytes(fTTSData));
 					cache.put(ttsData, cacheTask);
@@ -230,7 +240,7 @@ public abstract class TTSService extends Thread {
 		private byte[] getTTSBytes(TTSData ttsData) {
 			byte[] cache = new byte[4096];
 			try (InputStream in = requestProxy.requestTTSStream(ttsData);
-			     ByteArrayOutputStream baoStream = new ByteArrayOutputStream()) {
+				 ByteArrayOutputStream baoStream = new ByteArrayOutputStream()) {
 				int read;
 				while ((read = in.read(cache)) != -1)
 					baoStream.write(cache, 0, read);

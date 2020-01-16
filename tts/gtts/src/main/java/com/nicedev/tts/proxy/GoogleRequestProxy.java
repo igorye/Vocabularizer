@@ -19,20 +19,19 @@ abstract public class GoogleRequestProxy {
 	
 	static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
 	
-	final static private String HOST_NAME_FMT = "translate.google.%s";
-	private static ExecutorService executor;
-	final GTSRequest TTS_REQUEST_FMT;
+	final static private String         HOST_NAME_FMT = "translate.google.%s";
+	private static ExecutorService      executor;
+	final GTSRequest                    TTS_REQUEST;
 	private final BlockingDeque<String> relevantSuffixes;
-	private final List<String> possibleSuffixes;
-	private int next;
-	private boolean interrupted;
-	private volatile boolean proceedSuffixes = false;
-	private int switches;
-	private int rejects;
-	private int enums;
+	private final List<String>          possibleSuffixes;
+	private int                         next;
+	private volatile boolean            proceedSuffixes = false;
+	private int                         switches;
+	private int                         rejects;
+	private int                         enums;
 
 	GoogleRequestProxy( GTSRequest requestFmt ) {
-		TTS_REQUEST_FMT = requestFmt;
+		TTS_REQUEST = requestFmt;
 		executor = Executors.newFixedThreadPool(10, r -> {
 			Thread thread = new Thread(r);
 			thread.setDaemon(true);

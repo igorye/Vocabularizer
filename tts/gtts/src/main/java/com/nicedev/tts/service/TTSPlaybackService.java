@@ -8,9 +8,8 @@ import javax.sound.sampled.*;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 
 public class TTSPlaybackService extends TTSService {
@@ -21,7 +20,7 @@ public class TTSPlaybackService extends TTSService {
 
 	public TTSPlaybackService(int cacheSize, boolean showProgress) {
 		super(cacheSize, showProgress);
-		cache = Collections.synchronizedMap(new LinkedHashMap<>());
+		cache = new ConcurrentHashMap<>();
 		inputQueue = new ArrayBlockingQueue<>(100);
 		outputQueue = new ArrayBlockingQueue<>(cacheSize);
 		setName("PlaybackService");
@@ -39,7 +38,7 @@ public class TTSPlaybackService extends TTSService {
 				if (invalidateCache) {
 					yield();
 				} else {
-					if (ttsData.audioSource.contains("://"))
+					if (ttsData.textToSpeak.contains("://"))
 						playURL(ttsData);
 					else
 						playGTTS(ttsData);
@@ -59,7 +58,7 @@ public class TTSPlaybackService extends TTSService {
 		this(cacheSize, false);
 	}
 
-	// enque wav file at specified source
+	// enqueue wav file at specified source
 	private void playURL(TTSData pronunciationData) {
 		try (InputStream requestStream = requestProxy.requestTTSStream(pronunciationData);
 		     AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(requestStream)) {
@@ -88,20 +87,41 @@ public class TTSPlaybackService extends TTSService {
 		if (isLimited)
 			isStopping = executionLimit.getAndDecrement() <= 0;
 		try (InputStream pronunciationStream = new ByteArrayInputStream(cache.remove(ttsData).get())) {
+//			logStreamBytes(ttsData, pronunciationStream);
 			Player playerMP3 = new Player(pronunciationStream);
 			activePlayer = new StoppableAudioPlayer(playerMP3::close);
 			if (!invalidateCache) {
-				if (showProgress) LOGGER.info("{}", ttsData);
+				if (showProgress) System.out.println(ttsData);
 				playerMP3.play();
 			}
 			sleep(ttsData.delayAfter);
 		} catch (JavaLayerException | IOException | NullPointerException e) {
-			LOGGER.info("Error has occurred trying play {}%n", ttsData.audioSource);
+			LOGGER.info("Error has occurred trying play {}%n", ttsData.textToSpeak);
 		} catch (InterruptedException e) {
 			LOGGER.info("GTTS isStopping");
 		} catch (ExecutionException e) {
 			e.printStackTrace();
 		}
+	}
+
+	private void logStreamBytes( TTSData ttsData, InputStream stream ) {
+		if(stream.markSupported()) {
+			stream.mark(Integer.MAX_VALUE);
+			try {
+				LOGGER.debug("Stream bytes for tts of {}: {}",
+							 ttsData,
+							 toHexString(stream.readAllBytes()));
+				stream.reset();
+			} catch (IOException e) {/*NOP*/}
+		}
+	}
+
+	private String toHexString( byte[] bytes ) {
+		StringBuilder hex = new StringBuilder(bytes.length);
+		for(byte bt: bytes) {
+			hex.append(String.format(" %H", Byte.toUnsignedInt(bt)));
+		}
+		return hex.toString().replaceFirst(" ", "");
 	}
 
 	@Override

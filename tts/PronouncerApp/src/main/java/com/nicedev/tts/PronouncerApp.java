@@ -22,7 +22,7 @@ public class PronouncerApp {
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass().getName());
 
-	public static void main(String[] args) throws FileNotFoundException, InterruptedException {
+	public static void main( String[] args ) throws FileNotFoundException, InterruptedException {
 		long start = System.currentTimeMillis();
 		Map<String, String> mArgs = parseArgs(args);
 		if (mArgs.containsKey("-h")) {
@@ -34,37 +34,38 @@ public class PronouncerApp {
 		boolean inIsFile = !inFileName.isEmpty();
 		String outFileName = mArgs.get("-o");
 		outFileName = (outFileName == null || outFileName.isEmpty())
-				              ? getDefaultOutName(inFileName)
-				              : outFileName;
+							  ? getDefaultOutName(inFileName)
+							  : outFileName;
 		boolean fileOutput = mArgs.containsKey("-o");
 		TTSService ttsService = fileOutput
-				                        ? new TTSSaverService(outFileName, 10, bShowProgress)
-				                        : new TTSPlaybackService(10, bShowProgress);
+										? new TTSSaverService(outFileName, 10, bShowProgress)
+										: new TTSPlaybackService(10, bShowProgress);
+		if (mArgs.getOrDefault("-a", "GB").equalsIgnoreCase("us"))
+			ttsService.switchAccent();
 		Scanner in = inIsFile ? new Scanner(new FileReader(inFileName)) : new Scanner(System.in);
 		StringBuilder spellingBuilder = new StringBuilder();
 		String line = "", lastLine = "";
-		ttsService.setDelay('.', 200)
-				.setDelay(':', 150)
-				.setDelay(';', 100)
-				.setDelay(',', 0)
-				.setDelay('-', 100);
 		while (in.hasNextLine()) {
 			line = "";
 			try {
 				line = in.nextLine().trim();
 				switch (line) {
-					case "~"  : ttsService.switchAccent(); continue;
-					case "!~" : ttsService.resetAccent(); continue;
-					default   :
-						if (!lastLine.isEmpty()){
-						spellingBuilder.append(lastLine);
-						spellingBuilder.append(" ");
-					}
+					case "~":
+						ttsService.switchAccent();
+						continue;
+					case "!~":
+						ttsService.resetAccent();
+						continue;
+					default:
+						if (!lastLine.isEmpty()) {
+							spellingBuilder.append(lastLine);
+							spellingBuilder.append(" ");
+						}
 				}
 			} catch (NoSuchElementException e) {
 				continue;
 			}
-			if (line.matches("^\\s*$") || !fileOutput) {
+			if (line.matches("^\\s*$")/* || !fileOutput*/) {
 				spellingBuilder.append(line);
 				lastLine = "";
 				String text = prepareChunk(spellingBuilder);
@@ -81,12 +82,12 @@ public class PronouncerApp {
 		LOGGER.debug("releasing ttsService");
 		ttsService.join();
 		if (fileOutput) {
-			System.out.printf("Processed in %fs%n", (System.currentTimeMillis() - start)/1000f);
+			System.out.printf("Processed in %fs%n", (System.currentTimeMillis() - start) / 1000f);
 		}
 	}
 
 	private static String prepareChunk(StringBuilder spellingBuilder) {
-		return spellingBuilder.toString().replaceAll("`", "'").replaceAll("\\*", "");
+		return spellingBuilder.toString().replaceAll("`", "\"").replaceAll("\\*", "");
 	}
 
 	private static void showUsage() {
@@ -95,6 +96,7 @@ public class PronouncerApp {
 		System.out.println("-i - input file");
 		System.out.println("-o - output file");
 		System.out.println("-p - show progress");
+		System.out.println("-a - accent US or GB");
 		System.out.println("During reading \"~\" - switch accent (applied after a few phrases)");
 	}
 	

@@ -130,7 +130,7 @@ public class Combinatorics {
 		getUniqueCombinations(inputSet, combinations, bySize, 0, currentSubset);
 		return combinations;
 	}
-	
+
 	private static <T> void getUniqueCombinations(Collection<T> inputSet, Collection<Collection<T>> subsets,
 	                                              int bySize, int offset, List<T> currentSubset) {
 		if (offset > (inputSet.size() - bySize)) return;
@@ -144,7 +144,7 @@ public class Combinatorics {
 		getUniqueCombinations(inputSet, subsets, bySize - 1, offset + 1, currentSubset);
 		getUniqueCombinations(inputSet, subsets, bySize, offset+1, currentSubset);
 	}*/
-	
+
 	public static<T> Collection<Collection<T>> getUniqueCombinations(Collection<T> inputSet, int bySize) {
 		int combinationsCount = (int) Combinatorics.getUniqueCombinationsCount(inputSet.size(), bySize);
 		Collection<Collection<T>> combinations = new ArrayList<>(combinationsCount);
