@@ -25,13 +25,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.invoke.MethodHandles;
-import java.net.URL;
-import java.net.URLEncoder;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static java.util.Objects.nonNull;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 import static javax.xml.xpath.XPathConstants.*;
@@ -90,11 +90,12 @@ public class MerriamWebsterParser {
 		recentQuerySuggestions.clear();
 		String filteredEntry = String.join(" ", entry.split("[\\\\/?&]")).replaceAll("\\s{2,}", " ").trim();
 		encodedEntry = Optional.of(URLEncoder.encode(filteredEntry, StandardCharsets.UTF_8));
-		String request = String.format(expositorRequestFmt, encodedEntry.orElse(entry), key);
+		String requestUrl = String.format(expositorRequestFmt, encodedEntry.orElse(entry), key);
+		requestUrl = checkURL(requestUrl);
 		try {
 			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 			DocumentBuilder builder = dbf.newDocumentBuilder();
-			Document xmlDoc = builder.parse(request);
+			Document xmlDoc = builder.parse(requestUrl);
 			return extractVocabula(entry, xmlDoc, acceptSimilar);
 
 		} catch (SAXException | ParserConfigurationException | XPathExpressionException | NullPointerException e) {
@@ -105,6 +106,23 @@ public class MerriamWebsterParser {
 			             e.getCause());
 		}
 		return Collections.emptySet();
+	}
+
+	private String checkURL( String requestUrl ) {
+		HttpURLConnection conn = null;
+		try {
+			URL validated = new URL(requestUrl);
+			conn = (HttpURLConnection) validated.openConnection();
+			conn.connect();
+			if (conn.getResponseCode() != 200) {
+				return Optional.ofNullable(conn.getHeaderField("Location")).orElse(requestUrl);
+			}
+		} catch (IOException e) {
+			LOGGER.error(e.getMessage());
+		} finally {
+			if (nonNull(conn)) conn.disconnect();
+		}
+		return requestUrl;
 	}
 
 	private static class SearchResult implements Comparable<SearchResult> {
