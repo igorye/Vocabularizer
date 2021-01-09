@@ -132,7 +132,7 @@ public class GUIController implements Initializable {
     private static final int FILTER_DELAY = 500;
 
     private final String WH_REQUEST_URL = "http://wooordhunt.ru/word/%s";
-    private final String GT_REQUEST_URL = "https://translate.google.com/#view=home&op=translate&sl=%s&tl=%s&text=%s";
+    private final String GT_REQUEST_URL = "https://translate.google.com/?sl=%s&tl=%s&text=%s&op=translate";
     //    private final String GT_REQUEST_URL = "https://translate.google.com/#%s/%s/%s";
     private final String CLASS_HIGHLIGHTED = "highlighted";
     private final String cssHref;

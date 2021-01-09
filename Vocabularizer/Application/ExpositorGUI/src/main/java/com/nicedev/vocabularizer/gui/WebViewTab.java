@@ -47,6 +47,7 @@ public class WebViewTab extends Tab {
 		webView = (WebView) content;
 		webView.setOnMouseMoved(event -> cursorPosition.setValue(new Point2D(event.getSceneX(), event.getSceneY())));
 		webEngine = webView.getEngine();
+		webEngine.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36");
 		tooltip = new Tooltip(filter(text));
 		Font font = tooltip.getFont();
 		tooltip.fontProperty().set(new Font(font.getName(), font.getSize() + 1.0));
