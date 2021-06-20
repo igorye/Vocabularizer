@@ -51,7 +51,11 @@ public abstract class TTSService extends Thread {
 		cache = new ConcurrentHashMap<>();
 		inputQueue = new ArrayBlockingQueue<>(100);
 		outputQueue = new ArrayBlockingQueue<>(QUEUE_SIZE);
-		executor = Executors.newFixedThreadPool(QUEUE_SIZE);
+		executor = Executors.newFixedThreadPool(QUEUE_SIZE, r -> {
+			final Thread thread = new Thread(r);
+			thread.setDaemon(true);
+			return thread;
+		});
 		new CachingAgent().start();
 	}
 

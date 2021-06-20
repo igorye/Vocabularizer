@@ -3,4 +3,5 @@ module gtts {
     requires jlayer;
     requires java.desktop;
     requires org.slf4j;
+    requires java.net.http;
 }

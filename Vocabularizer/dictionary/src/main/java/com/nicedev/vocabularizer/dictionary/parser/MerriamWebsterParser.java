@@ -102,8 +102,8 @@ public class MerriamWebsterParser {
 			LOGGER.error("Error occured while retrieving [{}]. Unable to parse  document. {}", entry,
 			             Exceptions.getPackageStackTrace(e, "com.nicedev"));
 		} catch (IOException e) {
-			LOGGER.error("Error occured while retrieving [{}]. No response to request ({} {})", entry, e.getMessage(),
-			             e.getCause());
+			LOGGER.error("Error occured while retrieving [{}]. No response to request ({} {})",
+						 entry, e.getMessage(), e.getCause());
 		}
 		return Collections.emptySet();
 	}
